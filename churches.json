@@ -741,10 +741,10 @@
   "phone": "(941) 565-8822",
   "website": "",
   "email": "iglesiadeiosprotoeterno@gmail.com",
-  "lat": 27.438677,
-  "lng": -82.579674,
-  "approx": true,
-  "county": "",
+  "lat": 27.428005997757,
+  "lng": -82.550152345817,
+  "approx": false,
+  "county": "Manatee",
   "city_group": "Bradenton"
  },
  {
@@ -928,10 +928,10 @@
   "phone": "(813) 996-3548",
   "website": "lolcog.com",
   "email": "lolcog@lolcog.com",
-  "lat": 28.274188,
-  "lng": -82.529523,
-  "approx": true,
-  "county": "",
+  "lat": 28.279665195513,
+  "lng": -82.485068041126,
+  "approx": false,
+  "county": "Pasco",
   "city_group": "Land O Lakes"
  },
  {
@@ -1268,10 +1268,10 @@
   "phone": "(813) 535-2831",
   "website": "",
   "email": "luizalvarado895@gmail.com",
-  "lat": 27.693944,
-  "lng": -82.458577,
+  "lat": 27.719357960194444,
+  "lng": -82.43403405257033,
   "approx": true,
-  "county": "",
+  "county": "Hillsborough",
   "city_group": "Ruskin"
  },
  {
@@ -1336,10 +1336,10 @@
   "phone": "(727) 657-7742",
   "website": "",
   "email": "alimontes1110@gmail.com",
-  "lat": 27.905836,
-  "lng": -82.758774,
-  "approx": true,
-  "county": "",
+  "lat": 27.908373393435,
+  "lng": -82.762494532562,
+  "approx": false,
+  "county": "Pinellas",
   "city_group": "Largo"
  },
  {
@@ -1506,10 +1506,10 @@
   "phone": "(813) 782-2888",
   "website": "",
   "email": "janet@oasisworldoutreach.org",
-  "lat": 28.234002,
-  "lng": -82.22136,
-  "approx": true,
-  "county": "",
+  "lat": 28.22797751903,
+  "lng": -82.227337510431,
+  "approx": false,
+  "county": "Pasco",
   "city_group": "Zephyrhills"
  },
  {
@@ -1540,10 +1540,10 @@
   "phone": "(813) 764-5780",
   "website": "",
   "email": "iglesiadediostorref@gmail.com",
-  "lat": 27.977964,
-  "lng": -82.095709,
-  "approx": true,
-  "county": "",
+  "lat": 28.020464185635,
+  "lng": -82.189510651952,
+  "approx": false,
+  "county": "Hillsborough",
   "city_group": "Plant City"
  },
  {

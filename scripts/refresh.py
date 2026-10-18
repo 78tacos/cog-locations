@@ -4,7 +4,15 @@
 The locator is paged. Pages are fetched about three seconds apart. Street
 addresses are geocoded with the US Census batch geocoder. A ZIP that does
 not match falls back to that ZIP's center point and is marked approximate.
-An address that is already in churches.json keeps its saved coordinates.
+An address that is already in churches.json keeps its saved exact coordinates.
+
+Addresses the batch geocoder misses (and saved approximate pins) go through a
+fallback chain: the address is cleaned (suite stripped, city spelling fixed,
+address2 tried when address1 is a PO box or a name), then the single-address
+Census geocoder, then Nominatim (1 request/second), then the ArcGIS World
+Geocoder (findAddressCandidates, forStorage=false). A result is accepted only
+when it is a street-level match in the same ZIP or city. Only PO-box-only
+records stay approximate at the ZIP center.
 """
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from collections import defaultdict
@@ -24,6 +33,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCATOR_URL = "https://churchofgod.org/church_locator/churches.php"
+CENSUS_ONELINE_URL = "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress"
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+ARCGIS_URL = (
+    "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
+)
+ARCGIS_STREET_TYPES = frozenset(
+    {"PointAddress", "StreetAddress", "StreetAddressExt", "Subaddress", "StreetInt"}
+)
 CENSUS_BATCH_URL = "https://geocoding.geo.census.gov/geocoder/geographies/addressbatch"
 GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "tampa-churches-refresh/1.0 (+https://78tacos.github.io/tampa-churches/)"
@@ -305,10 +322,196 @@ def make_record(church: dict, lat: float, lng: float, approx: bool, county: str)
     return {key: values[key] for key in SCHEMA_KEYS}
 
 
+_PO_BOX_RE = re.compile(r"^\s*(p\.?\s*o\.?\s*box|post\s+office\s+box|box)\b", re.I)
+_SUITE_RE = re.compile(r"[\s,]+(suite|ste\.?|unit|apt\.?|bldg\.?|building|#)\s*[\w-]+\s*$", re.I)
+
+
+def is_po_box(text: str) -> bool:
+    return bool(_PO_BOX_RE.match(text or ""))
+
+
+def _looks_like_street(text: str) -> bool:
+    return bool(text) and not is_po_box(text) and bool(re.search(r"\d", text))
+
+
+def street_candidates(church: dict) -> list[str]:
+    """Cleaned street lines worth geocoding, best first. Empty for PO-box-only."""
+    found: list[str] = []
+    for raw in (church.get("address1", ""), church.get("address2", "")):
+        for part in re.split(r"\s*,\s*", raw or ""):
+            if not _looks_like_street(part):
+                continue
+            for variant in (part, _SUITE_RE.sub("", part).strip()):
+                if variant and variant not in found:
+                    found.append(variant)
+    return found
+
+
+def clean_city(city: str) -> str:
+    return city_group_for(city)
+
+
+def _same_place(church: dict, zip_code: str, city: str) -> bool:
+    if zip_code and zip_code[:5] == church.get("zip", "")[:5]:
+        return True
+    return bool(city) and _norm(city_group_for(city)) == _norm(clean_city(church.get("city", "")))
+
+
+def _strip_county(name: str) -> str:
+    return re.sub(r"\s+County$", "", (name or "").strip())
+
+
+AMBIGUOUS_METERS = 150
+NEIGHBORHOOD_METERS = 1500
+
+
+def _distance_m(a: tuple[float, float], b: tuple[float, float]) -> float:
+    import math
+
+    lat1, lng1, lat2, lng2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2
+    return 2 * 6371000 * math.asin(math.sqrt(h))
+
+
+class Ambiguous(Exception):
+    """Several different street-level matches; the address alone cannot pick one."""
+
+    def __init__(self, points: list[tuple[float, float, str]]):
+        super().__init__(f"{len(points)} different matches")
+        self.points = points
+
+
+def _pick(points: list[tuple[float, float, str]]) -> tuple[float, float, str] | None:
+    if not points:
+        return None
+    first = points[0]
+    if any(_distance_m(first[:2], other[:2]) > AMBIGUOUS_METERS for other in points[1:]):
+        raise Ambiguous(points)
+    return first
+
+
+def census_oneline(church: dict, street: str) -> tuple[float, float, str] | None:
+    query = f"{street}, {clean_city(church['city'])}, {church['state']} {church['zip']}"
+    params = urllib.parse.urlencode(
+        {
+            "address": query,
+            "benchmark": "Public_AR_Current",
+            "vintage": "Current_Current",
+            "format": "json",
+        }
+    )
+    data = json.loads(request_bytes(f"{CENSUS_ONELINE_URL}?{params}", timeout=60))
+    points: list[tuple[float, float, str]] = []
+    for match in data.get("result", {}).get("addressMatches", []):
+        parts = match.get("addressComponents", {})
+        if not _same_place(church, parts.get("zip", ""), parts.get("city", "")):
+            continue
+        counties = match.get("geographies", {}).get("Counties", [])
+        county = ""
+        if counties and counties[0].get("STATE") == "12":
+            county = FL_COUNTY_FIPS.get(counties[0].get("COUNTY", ""), "")
+        coords = match["coordinates"]
+        points.append((float(coords["y"]), float(coords["x"]), county))
+    return _pick(points)
+
+
+def nominatim(church: dict, street: str) -> tuple[float, float, str] | None:
+    params = urllib.parse.urlencode(
+        {
+            "street": street,
+            "city": clean_city(church["city"]),
+            "state": church["state"],
+            "postalcode": church["zip"],
+            "country": "us",
+            "format": "jsonv2",
+            "addressdetails": 1,
+            "limit": 3,
+        }
+    )
+    results = json.loads(request_bytes(f"{NOMINATIM_URL}?{params}", timeout=60))
+    points: list[tuple[float, float, str]] = []
+    for item in results:
+        address = item.get("address", {})
+        if not address.get("house_number"):
+            continue
+        city = address.get("city") or address.get("town") or address.get("village") or address.get("hamlet") or ""
+        if not _same_place(church, address.get("postcode", ""), city):
+            continue
+        points.append((float(item["lat"]), float(item["lon"]), _strip_county(address.get("county", ""))))
+    return _pick(points)
+
+
+def arcgis(church: dict, street: str) -> tuple[float, float, str] | None:
+    params = urllib.parse.urlencode(
+        {
+            "address": street,
+            "city": clean_city(church["city"]),
+            "region": church["state"],
+            "postal": church["zip"],
+            "countryCode": "USA",
+            "outFields": "Addr_type,Postal,City,Subregion",
+            "forStorage": "false",
+            "maxLocations": 3,
+            "f": "json",
+        }
+    )
+    data = json.loads(request_bytes(f"{ARCGIS_URL}?{params}", timeout=60))
+    points: list[tuple[float, float, str]] = []
+    best = None
+    for item in data.get("candidates", []):
+        attrs = item.get("attributes", {})
+        if attrs.get("Addr_type") not in ARCGIS_STREET_TYPES or item.get("score", 0) < 90:
+            continue
+        if best is None:
+            best = item.get("score", 0)
+        if item.get("score", 0) < best - 3:
+            continue
+        if not _same_place(church, attrs.get("Postal", ""), attrs.get("City", "")):
+            continue
+        loc = item["location"]
+        points.append((float(loc["y"]), float(loc["x"]), _strip_county(attrs.get("Subregion", ""))))
+    return _pick(points)
+
+
+GEOCODER_CHAIN = (("census", census_oneline, 1.0), ("nominatim", nominatim, 1.1), ("arcgis", arcgis, 1.0))
+
+
+def fallback_geocode(church: dict, sleep=time.sleep) -> tuple[float, float, str, str, bool] | None:
+    """Try harder on one address. Returns (lat, lng, county, source, approx) or None.
+
+    A geocoder that finds several different street matches (for example
+    204 2nd St NW, NE and SE) is not trusted; the next one is tried. If every
+    geocoder is ambiguous and the candidates all sit within about 1.5 km, the
+    pin goes at their middle and stays marked approximate.
+    """
+    ambiguous: list[tuple[float, float, str]] = []
+    for street in street_candidates(church):
+        for source, geocoder, pause in GEOCODER_CHAIN:
+            try:
+                hit = geocoder(church, street)
+            except Ambiguous as error:
+                print(f"  {source}: ambiguous for {church['name']} ({error})", file=sys.stderr)
+                ambiguous.extend(error.points)
+                hit = None
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as error:
+                print(f"  {source} failed for {church['name']}: {error}", file=sys.stderr)
+                hit = None
+            sleep(pause)
+            if hit is not None:
+                return hit[0], hit[1], hit[2], source, False
+    if ambiguous:
+        spread = max(_distance_m(a[:2], b[:2]) for a in ambiguous for b in ambiguous)
+        if spread <= NEIGHBORHOOD_METERS:
+            lat = sum(point[0] for point in ambiguous) / len(ambiguous)
+            lng = sum(point[1] for point in ambiguous) / len(ambiguous)
+            county = next((point[2] for point in ambiguous if point[2]), "")
+            return lat, lng, county, "ambiguous-street", True
+    return None
+
 def resolve_locations(
     churches: list[dict],
     existing: list[dict],
-    census_by_key: dict[tuple[str, str, str, str, str], tuple[float, float, str]],
+    census_by_key: dict[tuple[str, str, str, str, str], tuple],
     centroids: dict[str, tuple[float, float]],
 ) -> list[dict]:
     cache: dict[tuple[str, str, str, str, str], dict] = {}
@@ -319,6 +522,8 @@ def resolve_locations(
     for church in churches:
         key = address_key(church)
         old = cache.get(key)
+        if old is not None and old.get("approx") and key in census_by_key:
+            old = None
         if old is not None:
             resolved.append(
                 make_record(
@@ -332,8 +537,9 @@ def resolve_locations(
             continue
         hit = census_by_key.get(key)
         if hit is not None:
-            lat, lng, county = hit
-            resolved.append(make_record(church, lat, lng, False, county))
+            lat, lng, county = hit[:3]
+            approx = bool(hit[3]) if len(hit) > 3 else False
+            resolved.append(make_record(church, lat, lng, approx, county))
             continue
         center = centroids.get(church["zip"])
         if center is None:
@@ -681,7 +887,9 @@ def main() -> None:
     cached = {
         address_key(church)
         for church in existing
-        if isinstance(church.get("lat"), (int, float)) and isinstance(church.get("lng"), (int, float))
+        if isinstance(church.get("lat"), (int, float))
+        and isinstance(church.get("lng"), (int, float))
+        and not church.get("approx")
     }
     needs_geocode = [church for church in parsed if address_key(church) not in cached]
     print(
@@ -690,6 +898,17 @@ def main() -> None:
         flush=True,
     )
     census_hits = geocode_addresses(needs_geocode) if needs_geocode else {}
+    retried: set[tuple[str, str, str, str, str]] = set()
+    for church in needs_geocode:
+        key = address_key(church)
+        if key in census_hits or key in retried:
+            continue
+        retried.add(key)
+        hit = fallback_geocode(church)
+        if hit is not None:
+            lat, lng, county, source, approx = hit
+            census_hits[key] = (lat, lng, county, approx)
+            print(f"  {source} placed {church['name']} ({church['city']})", flush=True)
     unresolved = {
         church["zip"]
         for church in needs_geocode

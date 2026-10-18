@@ -285,3 +285,69 @@ class FormatTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FallbackGeocodeTests(unittest.TestCase):
+    def _chain(self, census=None, nominatim=None, arcgis=None):
+        def wrap(value):
+            def geocoder(church, street):
+                if isinstance(value, Exception):
+                    raise value
+                return value
+            return geocoder
+        return (("census", wrap(census), 0), ("nominatim", wrap(nominatim), 0), ("arcgis", wrap(arcgis), 0))
+
+    def _run(self, church, **kw):
+        original = refresh.GEOCODER_CHAIN
+        refresh.GEOCODER_CHAIN = self._chain(**kw)
+        try:
+            return refresh.fallback_geocode(church, sleep=lambda _: None)
+        finally:
+            refresh.GEOCODER_CHAIN = original
+
+    def test_street_candidates(self):
+        self.assertEqual(refresh.street_candidates(_church(address1="PO Box 476")), [])
+        self.assertEqual(
+            refresh.street_candidates(_church(address1="2523 US Hwy 27 S Suite 202")),
+            ["2523 US Hwy 27 S Suite 202", "2523 US Hwy 27 S"],
+        )
+        self.assertEqual(
+            refresh.street_candidates(_church(address1="PO Box 1", address2="12 Oak Street")),
+            ["12 Oak Street"],
+        )
+        self.assertEqual(refresh.street_candidates(_church(address1="Grace Chapel")), [])
+
+    def test_city_spelling_fixed(self):
+        self.assertEqual(refresh.clean_city("Brandenton"), "Bradenton")
+
+    def test_first_exact_match_wins(self):
+        hit = self._run(_church(), census=None, nominatim=(27.0, -82.0, "Pasco"), arcgis=(1.0, 1.0, "X"))
+        self.assertEqual(hit, (27.0, -82.0, "Pasco", "nominatim", False))
+
+    def test_po_box_only_is_not_geocoded(self):
+        self.assertIsNone(self._run(_church(address1="PO Box 9"), census=(27.0, -82.0, "Pasco")))
+
+    def test_ambiguous_matches_stay_approximate_at_middle(self):
+        points = [(27.7199, -82.4366, "Hillsborough"), (27.7202, -82.4321, "Hillsborough")]
+        hit = self._run(_church(), census=refresh.Ambiguous(points))
+        self.assertTrue(hit[4])
+        self.assertEqual(hit[3], "ambiguous-street")
+        self.assertAlmostEqual(hit[0], 27.72005, places=4)
+
+    def test_pick_rejects_distant_matches(self):
+        with self.assertRaises(refresh.Ambiguous):
+            refresh._pick([(27.7199, -82.4366, ""), (27.7202, -82.4321, "")])
+        self.assertEqual(refresh._pick([(27.0, -82.0, "A"), (27.0001, -82.0, "A")]), (27.0, -82.0, "A"))
+
+    def test_same_place_requires_zip_or_city(self):
+        church = _church(city="Brandenton", zip="34207")
+        self.assertTrue(refresh._same_place(church, "34207", ""))
+        self.assertTrue(refresh._same_place(church, "", "Bradenton"))
+        self.assertFalse(refresh._same_place(church, "33602", "Tampa"))
+
+    def test_saved_approx_pin_is_replaced_by_new_exact_hit(self):
+        church = _church()
+        old = dict(refresh.make_record(church, 1.0, 2.0, True, ""))
+        hits = {refresh.address_key(church): (27.5, -82.5, "Hillsborough", False)}
+        [record] = refresh.resolve_locations([church], [old], hits, {})
+        self.assertEqual((record["lat"], record["approx"], record["county"]), (27.5, False, "Hillsborough"))
