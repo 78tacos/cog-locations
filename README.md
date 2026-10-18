@@ -20,7 +20,7 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 2. It reads the name, pastor, address, city, state, ZIP, phone, website, and email from the HTML tables.
 3. It geocodes street addresses with the [US Census Bureau batch geocoder](https://geocoding.geo.census.gov/geocoder/). A ZIP that does not match uses that ZIP's center point and is stored with `"approx": true`.
 4. An address that is already on file keeps its saved coordinates.
-5. It keeps churches in Hillsborough, Pinellas, Pasco, Manatee, and Sarasota counties, plus any church whose point falls in the Tampa Bay box (latitude 26.9–28.5, longitude −82.95 to −81.9).
+5. It keeps every Florida church and records its county. A church that can't be placed is still listed in the directory without a pin.
 
 ```bash
 python3 scripts/refresh.py
