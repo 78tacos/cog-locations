@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild the Tampa Bay Church of God directory from churchofgod.org.
+"""Rebuild the Florida Church of God directory from churchofgod.org.
 
 The locator is paged. Pages are fetched about three seconds apart. Street
 addresses are geocoded with the US Census batch geocoder. A ZIP that does
@@ -61,13 +61,6 @@ CONTACT_KEYS = (
 )
 SCHEMA_KEYS = CONTACT_KEYS + ("lat", "lng", "approx", "county", "city_group")
 
-TARGET_COUNTIES = frozenset(
-    {"Hillsborough", "Pinellas", "Pasco", "Manatee", "Sarasota"}
-)
-LAT_MIN = 26.9
-LAT_MAX = 28.5
-LNG_MIN = -82.95
-LNG_MAX = -81.9
 
 # Census county FIPS for Florida (state 12), without the state prefix.
 FL_COUNTY_FIPS = {
@@ -255,7 +248,7 @@ def _parse_block(
             elif not saw_city:
                 address_lines.append(text)
         index += 1
-    if not zip_code:
+    if not zip_code and not (address_lines or pastor or phone or email or website):
         return None, index
     return (
         {
@@ -298,20 +291,8 @@ def page_counts(html: str) -> tuple[int, int, int] | None:
     return start, end, total
 
 
-def in_bbox(lat: float, lng: float) -> bool:
-    return LAT_MIN <= lat <= LAT_MAX and LNG_MIN <= lng <= LNG_MAX
-
-
-def keep_church(church: dict) -> bool:
-    """Keep only the five Tampa Bay counties.
-
-    A church with a known county is kept only if it is one of them; the
-    bounding box is used only when the county is unknown.
-    """
-    county = church.get("county") or ""
-    if county:
-        return county in TARGET_COUNTIES
-    return in_bbox(church["lat"], church["lng"])
+def has_pin(church: dict) -> bool:
+    return isinstance(church.get("lat"), (int, float)) and isinstance(church.get("lng"), (int, float))
 
 
 CENSUS_COORDS_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
@@ -338,7 +319,7 @@ def county_for_point(lat: float, lng: float) -> str:
 
 def fill_missing_counties(churches: list[dict], lookup=county_for_point, sleep=time.sleep) -> None:
     for church in churches:
-        if church.get("county"):
+        if church.get("county") or not has_pin(church):
             continue
         try:
             church["county"] = lookup(church["lat"], church["lng"]) or ""
@@ -582,6 +563,8 @@ def resolve_locations(
             continue
         center = centroids.get(church["zip"])
         if center is None:
+            # Still listed in the directory, just without a map pin.
+            resolved.append(make_record(church, None, None, False, ""))
             continue
         lat, lng = center
         resolved.append(make_record(church, lat, lng, True, ""))
@@ -956,13 +939,13 @@ def main() -> None:
     centroids = load_postal_centroids(unresolved) if unresolved else {}
     located = resolve_locations(parsed, existing, census_hits, centroids)
     fill_missing_counties(located)
-    selected = order_churches([church for church in located if keep_church(church)], existing)
-    located_keys = {order_key(church) for church in located}
-    unlocated = [church for church in parsed if order_key(church) not in located_keys]
+    # Every Florida record is kept; the county field is informational.
+    selected = order_churches(located, existing)
+    unlocated = [church for church in selected if not has_pin(church)]
     approx = sum(1 for church in selected if church["approx"])
     print(
-        f"Keeping {len(selected)} Tampa Bay churches ({approx} approximate); "
-        f"{len(located) - len(selected)} outside the area; {len(unlocated)} could not be located",
+        f"Keeping {len(selected)} Florida churches ({approx} approximate, "
+        f"{len(unlocated)} without a map pin)",
         flush=True,
     )
     for church in unlocated[:15]:

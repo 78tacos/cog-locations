@@ -1,10 +1,10 @@
-# Tampa Bay Church of God Map
+# Florida Church of God Map
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
 Updated monthly.
 
-**Live map:** https://78tacos.github.io/tampa-churches/
+**Live map:** https://78tacos.github.io/florida-churches/
 
 ## Use the map
 
@@ -26,7 +26,7 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 python3 scripts/refresh.py
 ```
 
-The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/tampa-churches/.
+The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/florida-churches/.
 
 ## Monthly update
 

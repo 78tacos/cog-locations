@@ -1,4 +1,4 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tampa Bay Churches of God – Radius Search</title>
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Florida Church of God Map</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
@@ -10,9 +10,9 @@
 input,select,button{font-size:16px!important;min-height:44px;box-sizing:border-box;margin:4px 0}#addr{width:100%}#go,#all{padding:0 16px}#radc{width:90px!important}
 .r{padding:10px 0;font-size:14px}.r a{display:inline-block;padding:6px 2px}.leaflet-touch .leaflet-bar a{width:40px;height:40px;line-height:40px}}
 input,select,button{font-size:14px;margin:2px 0}.r{border-bottom:1px solid #eee;padding:6px 0;font-size:13px;cursor:pointer}.r b{font-size:14px}.mi{float:right;color:#06c;font-weight:bold}.ap{color:#a60;font-size:11px}#status{font-size:12px;color:#555;margin:4px 0}</style></head><body>
-<div id="side"><h3 style="margin:4px 0">Church of God – Tampa Bay</h3>
+<div id="side"><h3 style="margin:4px 0">Florida Church of God Map</h3>
 <input id="addr" placeholder="Address, city or zip" style="width:100%"><br>
-Radius: <select id="rad"><option>5</option><option selected>10</option><option>15</option><option>25</option><option>50</option><option value="custom">custom…</option></select>
+Radius: <select id="rad"><option>5</option><option selected>10</option><option>15</option><option>25</option><option>50</option><option>75</option><option>100</option><option value="custom">custom…</option></select>
 <input id="radc" type="number" min="0.5" step="0.5" placeholder="miles" style="width:70px;display:none">
 <button id="go">Search</button> <button id="all">Show all</button>
 <div id="status">Type an address or click the map to set a center.</div><div id="list"></div><div style="font-size:11px;margin-top:10px;color:#888"><a href="directory.html" style="color:#888">All churches</a> · data: churchofgod.org</div></div>
@@ -21,28 +21,28 @@ Radius: <select id="rad"><option>5</option><option selected>10</option><option>1
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="churches.js"></script>
 <script>
-const map=L.map('map').setView([27.9,-82.5],9);
+const FL=[[24.4,-87.7],[31.1,-79.8]];const map=L.map('map',{preferCanvas:true}).fitBounds(FL);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-const cl=L.markerClusterGroup().addTo(map);let center=null,circle=null,cm=null;
+const cl=L.markerClusterGroup({chunkedLoading:true,removeOutsideVisibleBounds:true,maxClusterRadius:60}).addTo(map);let center=null,circle=null,cm=null;
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const full=c=>[c.address1,c.address2,`${c.city}, ${c.state} ${c.zip}`].filter(Boolean).join(', ');
 const url=w=>w?(/^https?:/i.test(w)?w:'http://'+w):'';
 const dir=c=>'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(full(c));
 function popup(c,d){return `<b>${esc(c.name)}</b><br>${c.pastor?'Pastor: '+esc(c.pastor)+'<br>':''}${esc(full(c))}<br>${c.phone?esc(c.phone)+'<br>':''}${c.website?`<a target=_blank href="${esc(url(c.website))}">${esc(c.website)}</a><br>`:''}${c.email?`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a><br>`:''}${c.approx?'<span class=ap>Location approximate (zip center)</span><br>':''}${d!=null?d.toFixed(1)+' mi away<br>':''}<a target=_blank href="${dir(c)}">Directions</a>`}
-CHURCHES.forEach(c=>{c.m=L.marker([c.lat,c.lng],{opacity:c.approx?0.6:1}).bindPopup(()=>popup(c,c.d))});
+const PINNED=CHURCHES.filter(c=>typeof c.lat==='number'&&typeof c.lng==='number');PINNED.forEach(c=>{c.m=L.marker([c.lat,c.lng],{opacity:c.approx?0.6:1}).bindPopup(()=>popup(c,c.d))});
 function hav(a,b,c,d){const R=3958.8,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(d-b),h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
 function miles(){const v=document.getElementById('rad').value;return v==='custom'?parseFloat(document.getElementById('radc').value)||10:+v}
 function render(items,showDist){cl.clearLayers();cl.addLayers(items.map(c=>c.m));
- document.getElementById('list').innerHTML=items.map((c,i)=>`<div class=r data-i="${i}">${showDist?`<span class=mi>${c.d.toFixed(1)} mi</span>`:''}<b>${esc(c.name)}</b><br>${esc(full(c))}${c.approx?' <span class=ap>(approx.)</span>':''}<br>${esc(c.phone)} ${c.website?`· <a target=_blank href="${esc(url(c.website))}">website</a>`:''} · <a target=_blank href="${dir(c)}">directions</a></div>`).join('');
+ document.getElementById('list').innerHTML=items.map((c,i)=>`<div class=r data-i="${i}">${showDist?`<span class=mi>${c.d.toFixed(1)} mi</span>`:''}<b>${esc(c.name)}</b><br>${esc(full(c))}${c.approx?' <span class=ap>(approx.)</span>':''}<br>${[c.phone&&esc(c.phone),c.website&&`<a target=_blank href="${esc(url(c.website))}">website</a>`,`<a target=_blank href="${dir(c)}">directions</a>`].filter(Boolean).join(' · ')}</div>`).join('');
  document.querySelectorAll('.r').forEach(el=>el.onclick=e=>{if(e.target.tagName==='A')return;const c=items[+el.dataset.i];cl.zoomToShowLayer(c.m,()=>c.m.openPopup())});}
-function search(){if(!center)return;const r=miles();CHURCHES.forEach(c=>c.d=hav(center[0],center[1],c.lat,c.lng));
- const res=CHURCHES.filter(c=>c.d<=r).sort((a,b)=>a.d-b.d);
+function search(){if(!center)return;const r=miles();PINNED.forEach(c=>c.d=hav(center[0],center[1],c.lat,c.lng));
+ const res=PINNED.filter(c=>c.d<=r).sort((a,b)=>a.d-b.d);
  if(circle)map.removeLayer(circle);if(cm)map.removeLayer(cm);
  circle=L.circle(center,{radius:r*1609.344,color:'#06c',fillOpacity:.05}).addTo(map);cm=L.circleMarker(center,{radius:6,color:'red'}).addTo(map);
  map.fitBounds(circle.getBounds());render(res,true);document.getElementById('status').textContent=`${res.length} churches within ${r} mi`;}
 async function geocode(){const q=document.getElementById('addr').value.trim();if(!q){search();return}
  document.getElementById('status').textContent='Geocoding…';
- const u='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-83.2,28.6,-81.8,26.9&q='+encodeURIComponent(q);
+ const u='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-87.7,31.1,-79.8,24.4&q='+encodeURIComponent(q);
  try{const j=await (await fetch(u,{headers:{'Accept':'application/json'}})).json();if(!j.length){document.getElementById('status').textContent='Address not found.';return}
  center=[+j[0].lat,+j[0].lon];search()}catch(e){document.getElementById('status').textContent='Geocoding failed: '+e}}
 document.getElementById('go').onclick=geocode;document.getElementById('addr').onkeydown=e=>{if(e.key==='Enter')geocode()};
@@ -50,7 +50,7 @@ document.getElementById('rad').onchange=e=>{document.getElementById('radc').styl
 document.getElementById('radc').oninput=search;
 map.on('click',e=>{center=[e.latlng.lat,e.latlng.lng];search()});
 document.getElementById('all').onclick=()=>{if(circle)map.removeLayer(circle);if(cm)map.removeLayer(cm);circle=cm=null;CHURCHES.forEach(c=>c.d=null);
- const s=[...CHURCHES].sort((a,b)=>a.name.localeCompare(b.name));render(s,false);map.fitBounds(cl.getBounds());document.getElementById('status').textContent=`Showing all ${s.length} churches`;};
+ const s=[...PINNED].sort((a,b)=>a.name.localeCompare(b.name));render(s,false);map.fitBounds(FL);document.getElementById('status').textContent=`Showing all ${s.length} mapped churches`+(CHURCHES.length>s.length?` (${CHURCHES.length-s.length} without a pin are in the directory)`:'');};
 document.getElementById('all').click();
 let rz;const fix=()=>{clearTimeout(rz);rz=setTimeout(()=>map.invalidateSize(),150)};
 addEventListener('resize',fix);addEventListener('orientationchange',fix);if(window.visualViewport)visualViewport.addEventListener('resize',fix);

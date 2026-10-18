@@ -1,15 +1,19 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Church of God – Tampa Bay Directory</title>
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Florida Church of God Directory</title>
 <style>body{font-family:system-ui,sans-serif;max-width:900px;margin:20px auto;padding:0 12px;font-size:14px}h2{border-bottom:2px solid #333;margin:18px 0 6px;font-size:17px;break-after:avoid}
-.c{padding:5px 0;border-bottom:1px solid #ddd;break-inside:avoid}.c b{font-size:15px}.ap{color:#a60;font-size:11px}#f{width:60%;font-size:15px;padding:4px}
-@media (max-width:768px){body{margin:12px auto;font-size:15px}#f{width:100%;font-size:16px;min-height:44px;box-sizing:border-box;margin:6px 0}.np button{min-height:44px;padding:0 16px}.c{padding:10px 0;overflow-wrap:anywhere}.c a{display:inline-block;padding:4px 0}h1{font-size:19px!important}}
+.c{padding:5px 0;border-bottom:1px solid #ddd;break-inside:avoid}.c b{font-size:15px}.ap{color:#a60;font-size:11px}#f{width:40%;font-size:15px;padding:4px}select{font-size:15px;padding:3px}
+@media (max-width:768px){body{margin:12px auto;font-size:15px}#f,select{width:100%;font-size:16px;min-height:44px;box-sizing:border-box;margin:6px 0}.np button{min-height:44px;padding:0 16px}.c{padding:10px 0;overflow-wrap:anywhere}.c a{display:inline-block;padding:4px 0}h1{font-size:19px!important}}
 @media print{.np{display:none}body{font-size:11px;margin:0}a{color:#000;text-decoration:none}}</style></head><body>
-<div class="np"><a href="index.html">← Map</a> · <input id="f" placeholder="Filter by name, pastor, city, address…"> <button onclick="print()">Print</button> <span id="n"></span></div>
-<h1 style="font-size:20px">Church of God – Greater Tampa Bay</h1><div id="out"></div>
+<div class="np"><a href="index.html">← Map</a> · <select id="co"><option value="">All counties</option></select> <select id="ci"><option value="">All cities</option></select> <input id="f" placeholder="Filter by name, pastor, address…"> <button onclick="print()">Print</button> <span id="n"></span></div>
+<h1 style="font-size:20px">Florida Church of God Directory</h1><div id="out"></div>
 <script src="churches.js"></script><script>
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function draw(q){q=q.toLowerCase();const g={};let n=0;
- CHURCHES.filter(c=>!q||Object.values(c).join(' ').toLowerCase().includes(q)).forEach(c=>{(g[c.city_group]=g[c.city_group]||[]).push(c);n++});
- document.getElementById('n').textContent=n+' churches';
- document.getElementById('out').innerHTML=Object.keys(g).sort().map(k=>`<h2>${esc(k)} (${g[k].length})</h2>`+g[k].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<div class=c><b>${esc(c.name)}</b>${c.pastor?' — Pastor '+esc(c.pastor):''}<br>${esc([c.address1,c.address2].filter(Boolean).join(', '))}, ${esc(c.city)}, ${c.state} ${c.zip}${c.approx?' <span class=ap>(map location approx.)</span>':''}<br>${[c.phone&&esc(c.phone),c.website&&`<a href="${esc(/^https?:/.test(c.website)?c.website:'http://'+c.website)}">${esc(c.website)}</a>`,c.email&&`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`].filter(Boolean).join(' · ')}</div>`).join('')).join('');}
-document.getElementById('f').oninput=e=>draw(e.target.value);draw('');
+const $=id=>document.getElementById(id),grp=c=>c.city_group||c.city||'(No city listed)';
+const opts=(sel,vals)=>sel.insertAdjacentHTML('beforeend',vals.map(v=>`<option>${esc(v)}</option>`).join(''));
+opts($('co'),[...new Set(CHURCHES.map(c=>c.county).filter(Boolean))].sort());
+function cities(){const co=$('co').value,cur=$('ci').value;$('ci').length=1;opts($('ci'),[...new Set(CHURCHES.filter(c=>!co||c.county===co).map(grp))].sort());if([...$('ci').options].some(o=>o.value===cur))$('ci').value=cur;}
+function draw(){const q=$('f').value.toLowerCase(),co=$('co').value,ci=$('ci').value;const g={};let n=0;
+ CHURCHES.filter(c=>(!co||c.county===co)&&(!ci||grp(c)===ci)&&(!q||[c.name,c.pastor,c.address1,c.address2,c.city,c.zip,c.phone,c.email,c.website,c.county].join(' ').toLowerCase().includes(q))).forEach(c=>{(g[grp(c)]=g[grp(c)]||[]).push(c);n++});
+ $('n').textContent=n+' churches';
+ $('out').innerHTML=Object.keys(g).sort().map(k=>`<h2>${esc(k)} <small style="font-weight:normal;color:#666">${esc(g[k][0].county?g[k][0].county+' County · ':'')}${g[k].length}</small></h2>`+g[k].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<div class=c><b>${esc(c.name)}</b>${c.pastor?' — Pastor '+esc(c.pastor):''}<br>${esc([c.address1,c.address2].filter(Boolean).join(', '))}${c.city?', '+esc(c.city):''}, ${c.state} ${c.zip}${c.approx?' <span class=ap>(map location approx.)</span>':''}${typeof c.lat!=='number'?' <span class=ap>(not on map)</span>':''}<br>${[c.phone&&esc(c.phone),c.website&&`<a href="${esc(/^https?:/.test(c.website)?c.website:'http://'+c.website)}">${esc(c.website)}</a>`,c.email&&`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`].filter(Boolean).join(' · ')}</div>`).join('')).join('');}
+$('co').onchange=()=>{cities();draw()};$('ci').onchange=draw;$('f').oninput=draw;cities();draw();
 </script></body></html>

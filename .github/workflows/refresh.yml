@@ -33,5 +33,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- churches.json churches.js
-          git commit -m "Refresh Tampa Bay church directory"
+          git commit -m "Refresh Florida church directory"
           git push origin HEAD:main

@@ -9,13 +9,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Tampa Bay Church of God Map
+JOSEPH_README = """# Florida Church of God Map
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
 Updated monthly.
 
-**Live map:** https://78tacos.github.io/tampa-churches/
+**Live map:** https://78tacos.github.io/florida-churches/
 """
 
 
@@ -147,24 +147,6 @@ class DirectoryRuleTests(unittest.TestCase):
         self.assertEqual(refresh.city_group_for("Brandenton"), "Bradenton")
         self.assertEqual(refresh.city_group_for("Tampa"), "Tampa")
 
-    def test_filter_keeps_only_target_counties_and_boxes_unknown_county(self):
-        hillsborough_north = _church(county="Hillsborough", lat=29.2, lng=-82.4, approx=False)
-        pasco = _church(county="Pasco", lat=28.6, lng=-82.5, approx=False)
-        polk_inside = _church(county="Polk", lat=27.8, lng=-82.0, approx=False)
-        polk_outside = _church(county="Polk", lat=28.0, lng=-81.5, approx=False)
-        miami = _church(county="Miami-Dade", lat=25.8, lng=-80.2, approx=False)
-        zip_inside = _church(county="", lat=26.9, lng=-82.95, approx=True)
-        zip_corner = _church(county="", lat=28.5, lng=-81.9, approx=True)
-        zip_outside = _church(county="", lat=26.89, lng=-82.5, approx=True)
-        self.assertTrue(refresh.keep_church(hillsborough_north))
-        self.assertTrue(refresh.keep_church(pasco))
-        self.assertFalse(refresh.keep_church(polk_inside))  # known non-target county, even inside the box
-        self.assertFalse(refresh.keep_church(polk_outside))
-        self.assertFalse(refresh.keep_church(miami))
-        self.assertTrue(refresh.keep_church(zip_inside))
-        self.assertTrue(refresh.keep_church(zip_corner))
-        self.assertFalse(refresh.keep_church(zip_outside))
-
     def test_unchanged_address_reuses_saved_coordinates(self):
         existing = [
             {
@@ -279,7 +261,7 @@ class FormatTests(unittest.TestCase):
     def test_readme_keeps_josephs_opening(self):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith(JOSEPH_README))
-        self.assertIn("https://78tacos.github.io/tampa-churches/", text)
+        self.assertIn("https://78tacos.github.io/florida-churches/", text)
         self.assertIn("scripts/refresh.py", text)
 
 
@@ -353,27 +335,37 @@ class FallbackGeocodeTests(unittest.TestCase):
         self.assertEqual((record["lat"], record["approx"], record["county"]), (27.5, False, "Hillsborough"))
 
 
-class AreaFilterTests(unittest.TestCase):
-    def _rec(self, county, lat=27.9, lng=-82.4):
-        return refresh.make_record(_church(), lat, lng, False, county)
+class StatewideTests(unittest.TestCase):
+    def test_every_county_is_kept_and_unplaced_records_stay_listed(self):
+        churches = [
+            _church(name="Miami", city="Miami", zip="33101", address1="1 A St"),
+            _church(name="Nowhere", city="Gone", zip="99999", address1="PO Box 1"),
+        ]
+        hits = {refresh.address_key(churches[0]): (25.77, -80.19, "Miami-Dade", False)}
+        records = refresh.resolve_locations(churches, [], hits, {})
+        self.assertEqual([r["name"] for r in records], ["Miami", "Nowhere"])
+        self.assertEqual(records[0]["county"], "Miami-Dade")
+        self.assertIsNone(records[1]["lat"])
+        self.assertFalse(refresh.has_pin(records[1]))
+        self.assertFalse(hasattr(refresh, "keep_church"))
 
-    def test_known_county_must_be_one_of_five(self):
-        for county in ("Hillsborough", "Pinellas", "Pasco", "Manatee", "Sarasota"):
-            self.assertTrue(refresh.keep_church(self._rec(county)))
-        # Inside the bounding box but in a neighbouring county: dropped.
-        for county in ("Polk", "Charlotte", "Hernando", "DeSoto"):
-            self.assertFalse(refresh.keep_church(self._rec(county, 28.0, -82.0)))
-
-    def test_unknown_county_uses_bounding_box(self):
-        self.assertTrue(refresh.keep_church(self._rec("", 27.9, -82.4)))
-        self.assertFalse(refresh.keep_church(self._rec("", 30.3, -81.6)))
-
-    def test_missing_county_filled_from_point_lookup(self):
-        records = [self._rec(""), self._rec("Pasco")]
+    def test_missing_county_filled_from_point_lookup_only_for_pins(self):
+        pinned = refresh.make_record(_church(), 28.0, -82.0, True, "")
+        unpinned = refresh.make_record(_church(), None, None, False, "")
+        known = refresh.make_record(_church(), 28.3, -82.4, False, "Pasco")
         calls = []
         refresh.fill_missing_counties(
-            records, lookup=lambda lat, lng: calls.append((lat, lng)) or "Polk", sleep=lambda _: None
+            [pinned, unpinned, known],
+            lookup=lambda lat, lng: calls.append((lat, lng)) or "Polk",
+            sleep=lambda _: None,
         )
-        self.assertEqual([r["county"] for r in records], ["Polk", "Pasco"])
-        self.assertEqual(len(calls), 1)
-        self.assertFalse(refresh.keep_church(records[0]))
+        self.assertEqual([pinned["county"], unpinned["county"], known["county"]], ["Polk", "", "Pasco"])
+        self.assertEqual(calls, [(28.0, -82.0)])
+
+    def test_record_without_zip_is_kept_when_it_has_contact_data(self):
+        html = (
+            "<p><b>North Miami Avenue</b></p><p>Pastor: Jane Doe</p>"
+            "<p>Phone: (305) 555-0100</p><p><b>Next</b></p><p>1 Main St</p><p>Miami, FL, 33101</p>"
+        )
+        names = [c["name"] for c in refresh.parse_churches(html)]
+        self.assertEqual(names, ["North Miami Avenue", "Next"])
