@@ -147,7 +147,7 @@ class DirectoryRuleTests(unittest.TestCase):
         self.assertEqual(refresh.city_group_for("Brandenton"), "Bradenton")
         self.assertEqual(refresh.city_group_for("Tampa"), "Tampa")
 
-    def test_filter_keeps_target_counties_and_the_bounding_box(self):
+    def test_filter_keeps_only_target_counties_and_boxes_unknown_county(self):
         hillsborough_north = _church(county="Hillsborough", lat=29.2, lng=-82.4, approx=False)
         pasco = _church(county="Pasco", lat=28.6, lng=-82.5, approx=False)
         polk_inside = _church(county="Polk", lat=27.8, lng=-82.0, approx=False)
@@ -158,7 +158,7 @@ class DirectoryRuleTests(unittest.TestCase):
         zip_outside = _church(county="", lat=26.89, lng=-82.5, approx=True)
         self.assertTrue(refresh.keep_church(hillsborough_north))
         self.assertTrue(refresh.keep_church(pasco))
-        self.assertTrue(refresh.keep_church(polk_inside))
+        self.assertFalse(refresh.keep_church(polk_inside))  # known non-target county, even inside the box
         self.assertFalse(refresh.keep_church(polk_outside))
         self.assertFalse(refresh.keep_church(miami))
         self.assertTrue(refresh.keep_church(zip_inside))
@@ -351,3 +351,29 @@ class FallbackGeocodeTests(unittest.TestCase):
         hits = {refresh.address_key(church): (27.5, -82.5, "Hillsborough", False)}
         [record] = refresh.resolve_locations([church], [old], hits, {})
         self.assertEqual((record["lat"], record["approx"], record["county"]), (27.5, False, "Hillsborough"))
+
+
+class AreaFilterTests(unittest.TestCase):
+    def _rec(self, county, lat=27.9, lng=-82.4):
+        return refresh.make_record(_church(), lat, lng, False, county)
+
+    def test_known_county_must_be_one_of_five(self):
+        for county in ("Hillsborough", "Pinellas", "Pasco", "Manatee", "Sarasota"):
+            self.assertTrue(refresh.keep_church(self._rec(county)))
+        # Inside the bounding box but in a neighbouring county: dropped.
+        for county in ("Polk", "Charlotte", "Hernando", "DeSoto"):
+            self.assertFalse(refresh.keep_church(self._rec(county, 28.0, -82.0)))
+
+    def test_unknown_county_uses_bounding_box(self):
+        self.assertTrue(refresh.keep_church(self._rec("", 27.9, -82.4)))
+        self.assertFalse(refresh.keep_church(self._rec("", 30.3, -81.6)))
+
+    def test_missing_county_filled_from_point_lookup(self):
+        records = [self._rec(""), self._rec("Pasco")]
+        calls = []
+        refresh.fill_missing_counties(
+            records, lookup=lambda lat, lng: calls.append((lat, lng)) or "Polk", sleep=lambda _: None
+        )
+        self.assertEqual([r["county"] for r in records], ["Polk", "Pasco"])
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(refresh.keep_church(records[0]))

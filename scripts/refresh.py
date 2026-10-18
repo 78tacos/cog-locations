@@ -303,9 +303,48 @@ def in_bbox(lat: float, lng: float) -> bool:
 
 
 def keep_church(church: dict) -> bool:
-    if church.get("county") in TARGET_COUNTIES:
-        return True
+    """Keep only the five Tampa Bay counties.
+
+    A church with a known county is kept only if it is one of them; the
+    bounding box is used only when the county is unknown.
+    """
+    county = church.get("county") or ""
+    if county:
+        return county in TARGET_COUNTIES
     return in_bbox(church["lat"], church["lng"])
+
+
+CENSUS_COORDS_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
+
+
+def county_for_point(lat: float, lng: float) -> str:
+    """Florida county containing a point, from the Census geographies endpoint."""
+    params = urllib.parse.urlencode(
+        {
+            "x": lng,
+            "y": lat,
+            "benchmark": "Public_AR_Current",
+            "vintage": "Current_Current",
+            "layers": "Counties",
+            "format": "json",
+        }
+    )
+    data = json.loads(request_bytes(f"{CENSUS_COORDS_URL}?{params}", timeout=60))
+    for county in data.get("result", {}).get("geographies", {}).get("Counties", []):
+        if county.get("STATE") == "12":
+            return FL_COUNTY_FIPS.get(county.get("COUNTY", ""), "")
+    return ""
+
+
+def fill_missing_counties(churches: list[dict], lookup=county_for_point, sleep=time.sleep) -> None:
+    for church in churches:
+        if church.get("county"):
+            continue
+        try:
+            church["county"] = lookup(church["lat"], church["lng"]) or ""
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as error:
+            print(f"  county lookup failed for {church['name']}: {error}", file=sys.stderr)
+        sleep(1.0)
 
 
 def make_record(church: dict, lat: float, lng: float, approx: bool, county: str) -> dict:
@@ -916,6 +955,7 @@ def main() -> None:
     }
     centroids = load_postal_centroids(unresolved) if unresolved else {}
     located = resolve_locations(parsed, existing, census_hits, centroids)
+    fill_missing_counties(located)
     selected = order_churches([church for church in located if keep_church(church)], existing)
     located_keys = {order_key(church) for church in located}
     unlocated = [church for church in parsed if order_key(church) not in located_keys]
