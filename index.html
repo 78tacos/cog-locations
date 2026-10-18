@@ -1,9 +1,14 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><title>Tampa Bay Churches of God – Radius Search</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-<style>body{margin:0;font-family:system-ui,sans-serif;display:flex;height:100vh}#side{width:380px;overflow:auto;padding:10px;box-sizing:border-box;border-right:1px solid #ccc}#map{flex:1}
+<style>html,body{margin:0}body{font-family:system-ui,sans-serif;display:flex;height:100vh;height:100dvh}#side{width:380px;flex:none;overflow:auto;padding:10px;box-sizing:border-box;border-right:1px solid #ccc}#map{flex:1;min-width:0}
+@media (max-width:768px){body{flex-direction:column;height:auto;min-height:100vh;min-height:100dvh}
+#map{order:-1;flex:none;width:100%;height:58vh;height:58dvh}
+#side{width:100%;overflow:visible;border-right:0;border-top:1px solid #ccc;padding:12px max(12px,env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+input,select,button{font-size:16px!important;min-height:44px;box-sizing:border-box;margin:4px 0}#addr{width:100%}#go,#all{padding:0 16px}#radc{width:90px!important}
+.r{padding:10px 0;font-size:14px}.r a{display:inline-block;padding:6px 2px}.leaflet-touch .leaflet-bar a{width:40px;height:40px;line-height:40px}}
 input,select,button{font-size:14px;margin:2px 0}.r{border-bottom:1px solid #eee;padding:6px 0;font-size:13px;cursor:pointer}.r b{font-size:14px}.mi{float:right;color:#06c;font-weight:bold}.ap{color:#a60;font-size:11px}#status{font-size:12px;color:#555;margin:4px 0}</style></head><body>
 <div id="side"><h3 style="margin:4px 0">Church of God – Tampa Bay</h3>
 <input id="addr" placeholder="Address, city or zip" style="width:100%"><br>
@@ -47,4 +52,6 @@ map.on('click',e=>{center=[e.latlng.lat,e.latlng.lng];search()});
 document.getElementById('all').onclick=()=>{if(circle)map.removeLayer(circle);if(cm)map.removeLayer(cm);circle=cm=null;CHURCHES.forEach(c=>c.d=null);
  const s=[...CHURCHES].sort((a,b)=>a.name.localeCompare(b.name));render(s,false);map.fitBounds(cl.getBounds());document.getElementById('status').textContent=`Showing all ${s.length} churches`;};
 document.getElementById('all').click();
+let rz;const fix=()=>{clearTimeout(rz);rz=setTimeout(()=>map.invalidateSize(),150)};
+addEventListener('resize',fix);addEventListener('orientationchange',fix);if(window.visualViewport)visualViewport.addEventListener('resize',fix);
 </script></body></html>
