@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   refresh:
@@ -25,23 +24,14 @@ jobs:
       - name: Refresh church data
         run: python scripts/refresh.py
 
-      - name: Open a pull request when the data changed
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Commit to main when the data changed
         run: |
           if git diff --quiet -- churches.json churches.js; then
-            echo "Church data is unchanged. No pull request opened."
+            echo "Church data is unchanged."
             exit 0
           fi
-          branch="church-refresh-${GITHUB_RUN_ID}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
           git add -- churches.json churches.js
           git commit -m "Refresh Tampa Bay church directory"
-          git push --set-upstream origin "$branch"
-          gh pr create \
-            --base main \
-            --head "$branch" \
-            --title "Refresh Tampa Bay church directory" \
-            --body "Monthly refresh of churches.json and churches.js from the Church of God Florida locator. Unchanged addresses keep their saved coordinates. Merging updates the GitHub Pages site at https://78tacos.github.io/tampa-churches/."
+          git push origin HEAD:main

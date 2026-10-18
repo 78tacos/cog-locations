@@ -30,7 +30,7 @@ The download pauses between pages, so a full run takes a few minutes. Review the
 
 ## Monthly update
 
-`.github/workflows/refresh.yml` runs at 13:00 UTC on the 1st of each month. It can also be started by hand with **workflow_dispatch**. The workflow runs the script and opens a pull request only when the data changed.
+`.github/workflows/refresh.yml` runs at 13:00 UTC on the 1st of each month. It can also be started by hand with **workflow_dispatch**. The workflow runs the script and commits to main only when the data changed.
 
 ## Tests
 
