@@ -265,10 +265,6 @@ class FormatTests(unittest.TestCase):
         self.assertIn("scripts/refresh.py", text)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class FallbackGeocodeTests(unittest.TestCase):
     def _chain(self, census=None, nominatim=None, arcgis=None):
         def wrap(value):
@@ -369,3 +365,7 @@ class StatewideTests(unittest.TestCase):
         )
         names = [c["name"] for c in refresh.parse_churches(html)]
         self.assertEqual(names, ["North Miami Avenue", "Next"])
+
+
+if __name__ == "__main__":
+    unittest.main()
