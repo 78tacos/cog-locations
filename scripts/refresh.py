@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import re
 import sys
 import time
@@ -386,8 +387,6 @@ NEIGHBORHOOD_METERS = 1500
 
 
 def _distance_m(a: tuple[float, float], b: tuple[float, float]) -> float:
-    import math
-
     lat1, lng1, lat2, lng2 = map(math.radians, (a[0], a[1], b[0], b[1]))
     h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2
     return 2 * 6371000 * math.asin(math.sqrt(h))
@@ -528,6 +527,7 @@ def fallback_geocode(church: dict, sleep=time.sleep) -> tuple[float, float, str,
             return lat, lng, county, "ambiguous-street", True
     return None
 
+
 def resolve_locations(
     churches: list[dict],
     existing: list[dict],
@@ -536,7 +536,7 @@ def resolve_locations(
 ) -> list[dict]:
     cache: dict[tuple[str, str, str, str, str], dict] = {}
     for old in existing:
-        if isinstance(old.get("lat"), (int, float)) and isinstance(old.get("lng"), (int, float)):
+        if has_pin(old):
             cache.setdefault(address_key(old), old)
     resolved: list[dict] = []
     for church in churches:
@@ -909,9 +909,7 @@ def main() -> None:
     cached = {
         address_key(church)
         for church in existing
-        if isinstance(church.get("lat"), (int, float))
-        and isinstance(church.get("lng"), (int, float))
-        and not church.get("approx")
+        if has_pin(church) and not church.get("approx")
     }
     needs_geocode = [church for church in parsed if address_key(church) not in cached]
     print(
