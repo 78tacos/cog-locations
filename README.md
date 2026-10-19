@@ -17,9 +17,9 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 `scripts/refresh.py` rewrites `churches.json` and `churches.js`:
 
 1. It downloads each Florida page from the [Church of God locator](https://churchofgod.org/church_locator/churches.php?state=FL), about 3 seconds apart.
-2. It reads the name, pastor, address, city, state, ZIP, phone, website, and email from the HTML tables.
-3. It geocodes street addresses with the [US Census Bureau batch geocoder](https://geocoding.geo.census.gov/geocoder/). A ZIP that does not match uses that ZIP's center point and is stored with `"approx": true`.
-4. An address that is already on file keeps its saved coordinates.
+2. It reads the name, pastor, address, city, state, ZIP, phone, website, and email by walking the `<p>` text on each page (`parse_churches`).
+3. It geocodes street addresses with the [US Census Bureau batch geocoder](https://geocoding.geo.census.gov/geocoder/). A batch miss runs `fallback_geocode`: Census one-line, then Nominatim, then ArcGIS. The last resort is that ZIP's center, stored with `"approx": true`.
+4. The cache reuses a saved pin only when `"approx"` is false. Approximate pins are geocoded again.
 5. It keeps every Florida church and records its county. A church that can't be placed is still listed in the directory without a pin.
 
 ```bash
