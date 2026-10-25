@@ -1,4 +1,4 @@
-# Church of God Map — Florida and the Southeast
+# Church of God Map — Florida, the Southeast, and South-Central
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -26,7 +26,7 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 python3 scripts/refresh.py
 ```
 
-The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS`). The published directory now includes Florida and the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi). `python3 scripts/refresh.py FL GA AL SC NC TN MS` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS` so the next refresh keeps every published state.
+The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX`). The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), and the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas). `python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` so the next refresh keeps every published state.
 
 The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/cog-locations/.
 

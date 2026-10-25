@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Church of God Map — Florida and the Southeast
+JOSEPH_README = """# Church of God Map — Florida, the Southeast, and South-Central
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -219,6 +219,10 @@ class DirectoryRuleTests(unittest.TestCase):
             "NC": set(refresh.COUNTY_FIPS_BY_STATE["37"].values()),
             "TN": set(refresh.COUNTY_FIPS_BY_STATE["47"].values()),
             "MS": set(refresh.COUNTY_FIPS_BY_STATE["28"].values()),
+            "LA": set(refresh.COUNTY_FIPS_BY_STATE["22"].values()),
+            "AR": set(refresh.COUNTY_FIPS_BY_STATE["05"].values()),
+            "OK": set(refresh.COUNTY_FIPS_BY_STATE["40"].values()),
+            "TX": set(refresh.COUNTY_FIPS_BY_STATE["48"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -298,14 +302,20 @@ class DirectoryRuleTests(unittest.TestCase):
         self.assertEqual(refresh.county_from_fips("13", "121"), "Fulton")
         self.assertEqual(refresh.county_from_fips("13", "051"), "Chatham")
         self.assertEqual(refresh.county_from_fips("01", "001"), "Autauga")
+        self.assertEqual(refresh.county_from_fips("22", "071"), "Orleans")
+        self.assertEqual(refresh.county_from_fips("05", "119"), "Pulaski")
+        self.assertEqual(refresh.county_from_fips("40", "109"), "Oklahoma")
+        self.assertEqual(refresh.county_from_fips("48", "201"), "Harris")
+        self.assertNotIn("Parish", refresh.county_from_fips("22", "071"))
         self.assertEqual(refresh.FL_COUNTY_FIPS, FLORIDA_COUNTY_FIPS)
 
     def test_parse_national_county_snippet(self):
-        text = "GA,13,121,Fulton County,H1\nFL,12,057,Hillsborough County,H1\n"
+        text = "GA,13,121,Fulton County,H1\nFL,12,057,Hillsborough County,H1\nLA,22,071,Orleans Parish,H6\n"
         states, counties = refresh.parse_national_county(text)
-        self.assertEqual(states, {"GA": "13", "FL": "12"})
+        self.assertEqual(states, {"GA": "13", "FL": "12", "LA": "22"})
         self.assertEqual(counties["13"]["121"], "Fulton")
         self.assertEqual(counties["12"]["057"], "Hillsborough")
+        self.assertEqual(counties["22"]["071"], "Orleans")
 
 
 class FormatTests(unittest.TestCase):
@@ -428,12 +438,14 @@ class FormatTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "The published directory now includes Florida and the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi).",
+            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), and the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas).",
             text,
         )
-        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS` rebuilds it.", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` rebuilds it.", text)
+        self.assertIn("https://78tacos.github.io/cog-locations/", text)
         self.assertNotIn("stay Florida-only", text)
         self.assertNotIn("Florida and Georgia (pilot)", text)
+        self.assertNotIn("https://78tacos.github.io/florida-churches/", text)
 
 
 class FallbackGeocodeTests(unittest.TestCase):
@@ -494,6 +506,25 @@ class FallbackGeocodeTests(unittest.TestCase):
         self.assertTrue(refresh._same_place(church, "", "Bradenton"))
         self.assertFalse(refresh._same_place(church, "33602", "Tampa"))
 
+    def test_numberless_address_stays_at_the_zip_center(self):
+        church = _church(
+            address1="Church Street at Cain Avenue",
+            city="Russellville",
+            state="AR",
+            zip="72802",
+        )
+        old = refresh.make_record(church, 35.3036, -93.1224, False, "Pope")
+        hits = {refresh.address_key(church): (35.3036, -93.1224, "Pope", False)}
+        centroids = {"72802": (35.2781, -93.1334)}
+        [record] = refresh.resolve_locations([church], [old], hits, centroids)
+        self.assertTrue(record["approx"])
+        self.assertEqual(record["lat"], 35.2781)
+        self.assertEqual(record["lng"], -93.1334)
+        self.assertEqual(record["county"], "")
+        [kept] = refresh.resolve_locations([church], [old], hits, {})
+        self.assertFalse(kept["approx"])
+        self.assertEqual(kept["lat"], 35.3036)
+
     def test_saved_approx_pin_is_replaced_by_new_exact_hit(self):
         church = _church()
         old = dict(refresh.make_record(church, 1.0, 2.0, True, ""))
@@ -541,6 +572,19 @@ class StatewideTests(unittest.TestCase):
         )
         self.assertEqual(calls, [{"13"}])
         self.assertEqual(pinned["county"], "Fulton")
+
+    def test_missing_louisiana_county_uses_louisiana_fips(self):
+        pinned = refresh.make_record(
+            _church(state="LA", city="New Orleans", zip="70112"), 29.95, -90.07, False, ""
+        )
+        calls = []
+        refresh.fill_missing_counties(
+            [pinned],
+            lookup=lambda lat, lng, allowed=None: calls.append(set(allowed)) or "Orleans",
+            sleep=lambda _: None,
+        )
+        self.assertEqual(calls, [{"22"}])
+        self.assertEqual(pinned["county"], "Orleans")
 
     def test_short_zip4_still_parses_city_state_and_five_digit_zip(self):
         html = (
