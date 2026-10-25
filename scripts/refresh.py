@@ -118,10 +118,14 @@ def state_fips_for(states: list[str]) -> set[str]:
 FLORIDA_STATE_FIPS = frozenset({"12"})
 
 
-def normalize_state_fips(state_fips: set[str] | frozenset[str] | None) -> frozenset[str]:
-    """Normalize a state-FIPS allow-list. None means Florida, the historical default."""
+def normalize_state_fips(state_fips: set[str] | frozenset[str]) -> frozenset[str]:
+    """Normalize an explicit state-FIPS allow-list.
+
+    None is rejected. Callers pass the states they mean, including {"12"} for
+    a Florida-only run. There is no keep-every-state default.
+    """
     if state_fips is None:
-        return FLORIDA_STATE_FIPS
+        raise TypeError("allowed state FIPS set is required")
     return frozenset(str(code).strip().zfill(2) for code in state_fips)
 
 
@@ -141,7 +145,7 @@ def allowed_fips_for_church(church: dict) -> frozenset[str]:
 def census_county_name(
     state_fips: str,
     county_fips: str,
-    allowed_state_fips: set[str] | frozenset[str] | None = None,
+    allowed_state_fips: set[str] | frozenset[str],
 ) -> str:
     allowed = normalize_state_fips(allowed_state_fips)
     state = str(state_fips or "").strip().zfill(2)
@@ -325,6 +329,8 @@ def county_for_point(
     The default allow-list is Florida (FIPS 12). Pass the church's state FIPS
     to resolve a county in another requested state.
     """
+    if allowed_state_fips is None:
+        allowed_state_fips = FLORIDA_STATE_FIPS
     params = urllib.parse.urlencode(
         {
             "x": lng,
@@ -630,13 +636,12 @@ def render_js(churches: list[dict]) -> str:
 
 def parse_census_batch(
     text: str,
-    state_fips: set[str] | frozenset[str] | None = None,
+    state_fips: set[str] | frozenset[str],
 ) -> dict[str, tuple[float, float, str]]:
     """Map a Census batch id to (lat, lng, county).
 
-    state_fips is the allow-list. The default is Florida (FIPS 12), so a
-    Florida-only run still drops out-of-state hits. Pass the requested states
-    to keep those matches.
+    state_fips is required. A Florida-only run passes {"12"} and drops every
+    other state. There is no default that keeps matches from all states.
 
     Columns, when a row matches, are: id, input address, status, match type,
     matched address, lon,lat, tiger line id, side, state FIPS, county FIPS.
@@ -854,8 +859,9 @@ def _post_census(churches: list[dict]) -> str:
 
 def geocode_addresses(
     churches: list[dict],
-    state_fips: set[str] | frozenset[str] | None = None,
+    state_fips: set[str] | frozenset[str],
 ) -> dict[tuple[str, str, str, str, str], tuple[float, float, str]]:
+    allowed = normalize_state_fips(state_fips)
     unique: list[dict] = []
     seen: set[tuple[str, str, str, str, str]] = set()
     for church in churches:
@@ -868,7 +874,7 @@ def geocode_addresses(
     chunk_size = 5000
     for start in range(0, len(unique), chunk_size):
         chunk = unique[start : start + chunk_size]
-        parsed = parse_census_batch(_post_census(chunk), state_fips)
+        parsed = parse_census_batch(_post_census(chunk), allowed)
         for index, church in enumerate(chunk, start=1):
             hit = parsed.get(str(index))
             if hit is not None:

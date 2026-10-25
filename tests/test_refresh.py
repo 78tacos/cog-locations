@@ -314,8 +314,15 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(set(hits), {"1", "4"})
         self.assertEqual(hits["1"], (27.930365515933, -82.271565015116, "Hillsborough"))
         self.assertEqual(hits["4"][2], "Hillsborough")
-        # Omitting the allow-list is the Florida filter, same as an FL-only run.
-        self.assertEqual(set(refresh.parse_census_batch(text)), {"1", "4"})
+
+    def test_census_batch_requires_an_explicit_state_filter(self):
+        text = '"3","1 Peachtree St, Atlanta, GA, 30303","Match","Exact","1 PEACHTREE ST, ATLANTA, GA, 30303","-84.3,33.7","1","L","13","121","000100","1000"'
+        with self.assertRaises(TypeError):
+            refresh.parse_census_batch(text)
+        with self.assertRaises(TypeError):
+            refresh.parse_census_batch(text, None)
+        with self.assertRaises(TypeError):
+            refresh.geocode_addresses([], None)
 
     def test_census_batch_parser_keeps_requested_non_florida_matches(self):
         text = "\n".join(
