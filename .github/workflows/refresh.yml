@@ -22,7 +22,8 @@ jobs:
           python-version: "3.12"
 
       - name: Refresh church data
-        run: python scripts/refresh.py FL
+        # Florida-only would rewrite churches.json and drop Georgia on the next run.
+        run: python scripts/refresh.py FL GA
 
       - name: Commit to main when the data changed
         run: |
@@ -33,5 +34,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- churches.json churches.js
-          git commit -m "Refresh Florida church directory"
+          git commit -m "Refresh Florida and Georgia church directory"
           git push origin HEAD:main
