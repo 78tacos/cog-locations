@@ -4,7 +4,7 @@ A project I made because the official Church of God website is really not great 
 
 Updated monthly.
 
-**Live map:** https://78tacos.github.io/florida-churches/
+**Live map:** https://78tacos.github.io/cog-locations/
 
 ## Use the map
 
@@ -28,7 +28,7 @@ python3 scripts/refresh.py
 
 The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS`). The published directory now includes Florida and the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi). `python3 scripts/refresh.py FL GA AL SC NC TN MS` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS` so the next refresh keeps every published state.
 
-The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/florida-churches/.
+The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/cog-locations/.
 
 ## Monthly update
 

@@ -46,7 +46,7 @@ ARCGIS_STREET_TYPES = frozenset(
 )
 CENSUS_BATCH_URL = "https://geocoding.geo.census.gov/geocoder/geographies/addressbatch"
 GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
-USER_AGENT = "florida-churches-refresh/1.0 (+https://78tacos.github.io/florida-churches/)"
+USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
 DEFAULT_STATES = ("FL",)
