@@ -12,8 +12,8 @@ fallback chain: the address is cleaned (suite stripped, city spelling fixed,
 address2 tried when address1 is a PO box or a name), then the single-address
 Census geocoder, then Nominatim (1 request/second), then the ArcGIS World
 Geocoder (findAddressCandidates, forStorage=false). A result is accepted only
-when it is a street-level match in the same ZIP or city. Only PO-box-only
-records stay approximate at the ZIP center.
+when it is a street-level match in the same ZIP or city. An address with no
+house number stays approximate at that ZIP's center.
 """
 
 from __future__ import annotations
@@ -49,6 +49,10 @@ GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
+# Below the smallest published state (Louisiana, 56) and above a one-page
+# locator response (about 10). An empty or near-empty state must fail even
+# when the other states already clear the combined floor of 100.
+MIN_PER_STATE = 25
 DEFAULT_STATES = ("FL",)
 NATIONAL_COUNTY_PATH = Path(__file__).with_name("national_county.txt")
 
@@ -68,14 +72,19 @@ SCHEMA_KEYS = CONTACT_KEYS + ("lat", "lng", "approx", "county", "city_group")
 
 
 def _strip_county(name: str) -> str:
-    return re.sub(r"\s+County$", "", (name or "").strip())
+    """Bare county or parish name, matching the directory's existing values.
+
+    Florida stays Hillsborough, not Hillsborough County. Louisiana stays
+    Orleans, not Orleans Parish. The directory adds County or Parish itself.
+    """
+    return re.sub(r"\s+(?:County|Parish)$", "", (name or "").strip())
 
 
 def parse_national_county(text: str) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
     """Parse Census national_county.txt into state and county FIPS tables.
 
-    Names drop a trailing " County" so Florida stays Alachua, Hillsborough,
-    Miami-Dade, St. Johns, and the rest of the existing directory values.
+    Names drop a trailing " County" or " Parish" so Florida stays Alachua,
+    Hillsborough, Miami-Dade, St. Johns, and Louisiana stays Orleans.
     Source: https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt
     """
     state_fips: dict[str, str] = {}
@@ -573,8 +582,14 @@ def resolve_locations(
     resolved: list[dict] = []
     for church in churches:
         key = address_key(church)
+        # No house number (PO box, street name, or "at"/corner description).
+        # A Census hit on that text is not a rooftop. Use the ZIP center when
+        # this run has one; otherwise keep the saved pin.
+        numbered = bool(street_candidates(church))
         old = cache.get(key)
-        if old is not None and old.get("approx") and key in census_by_key:
+        if old is not None and not numbered and church.get("zip") in centroids:
+            old = None
+        if old is not None and numbered and old.get("approx") and key in census_by_key:
             old = None
         if old is not None:
             resolved.append(
@@ -587,7 +602,7 @@ def resolve_locations(
                 )
             )
             continue
-        hit = census_by_key.get(key)
+        hit = census_by_key.get(key) if numbered else None
         if hit is not None:
             lat, lng, county = hit[:3]
             approx = bool(hit[3]) if len(hit) > 3 else False
@@ -983,12 +998,39 @@ def region_label(states: list[str]) -> str:
 
 
 def min_expected_count(states: list[str]) -> int:
-    """Refuse to write when the combined download is below MIN_STATEWIDE.
+    """Combined floor for the whole download.
 
     The floor is 100 churches total for whatever states were requested. It does
     not grow with how many states were requested. FL alone still requires 100.
+    A single wiped state is caught by require_complete_download.
     """
     return MIN_STATEWIDE
+
+
+def require_complete_download(states: list[str], churches: list[dict]) -> None:
+    """Stop before any directory write when a requested state is missing.
+
+    The combined floor can be met by the other states, so each requested state
+    is counted on its own. Zero rows and a near-empty page both fail. A state
+    at MIN_PER_STATE still has to clear the combined floor with the rest.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    for church in churches:
+        code = str(church.get("state") or "").strip().upper()
+        if code:
+            counts[code] += 1
+    short = [state for state in states if counts.get(state, 0) < MIN_PER_STATE]
+    if short:
+        detail = ", ".join(f"{state} {counts.get(state, 0)}" for state in short)
+        raise SystemExit(
+            f"Parsed too few churches in {detail}; "
+            f"each requested state needs at least {MIN_PER_STATE}. "
+            "Leaving the directory files unchanged"
+        )
+    if len(churches) < min_expected_count(states):
+        raise SystemExit(
+            f"Parsed only {len(churches)} churches; leaving the directory files unchanged"
+        )
 
 
 def parse_states(argv: list[str] | None = None) -> list[str]:
@@ -1025,15 +1067,12 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Downloading {label} churches from churchofgod.org", flush=True)
     parsed = dedupe(fetch_states(REQUEST_INTERVAL_SECONDS, states))
     print(f"Parsed {len(parsed)} {label} churches", flush=True)
-    if len(parsed) < min_expected_count(states):
-        raise SystemExit(
-            f"Parsed only {len(parsed)} churches; leaving the directory files unchanged"
-        )
+    require_complete_download(states, parsed)
 
     cached = {
         address_key(church)
         for church in existing
-        if has_pin(church) and not church.get("approx")
+        if has_pin(church) and not church.get("approx") and street_candidates(church)
     }
     needs_geocode = [church for church in parsed if address_key(church) not in cached]
     print(
@@ -1054,6 +1093,9 @@ def main(argv: list[str] | None = None) -> None:
             lat, lng, county, source, approx = hit
             census_hits[key] = (lat, lng, county, approx)
             print(f"  {source} placed {church['name']} ({church['city']})", flush=True)
+    for church in parsed:
+        if not street_candidates(church):
+            census_hits.pop(address_key(church), None)
     unresolved = {
         church["zip"]
         for church in needs_geocode
