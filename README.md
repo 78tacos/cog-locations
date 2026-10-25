@@ -23,7 +23,7 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 5. It keeps every Florida church and records its county. A church that can't be placed is still listed in the directory without a pin.
 
 ```bash
-python3 scripts/refresh.py
+python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX
 ```
 
 The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX`). The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), and the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas). `python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` so the next refresh keeps every published state.

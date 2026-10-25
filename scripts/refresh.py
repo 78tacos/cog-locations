@@ -49,6 +49,10 @@ GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
+# Below the smallest published state (Louisiana, 56) and above a one-page
+# locator response (about 10). An empty or near-empty state must fail even
+# when the other states already clear the combined floor of 100.
+MIN_PER_STATE = 25
 DEFAULT_STATES = ("FL",)
 NATIONAL_COUNTY_PATH = Path(__file__).with_name("national_county.txt")
 
@@ -994,12 +998,39 @@ def region_label(states: list[str]) -> str:
 
 
 def min_expected_count(states: list[str]) -> int:
-    """Refuse to write when the combined download is below MIN_STATEWIDE.
+    """Combined floor for the whole download.
 
     The floor is 100 churches total for whatever states were requested. It does
     not grow with how many states were requested. FL alone still requires 100.
+    A single wiped state is caught by require_complete_download.
     """
     return MIN_STATEWIDE
+
+
+def require_complete_download(states: list[str], churches: list[dict]) -> None:
+    """Stop before any directory write when a requested state is missing.
+
+    The combined floor can be met by the other states, so each requested state
+    is counted on its own. Zero rows and a near-empty page both fail. A state
+    at MIN_PER_STATE still has to clear the combined floor with the rest.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    for church in churches:
+        code = str(church.get("state") or "").strip().upper()
+        if code:
+            counts[code] += 1
+    short = [state for state in states if counts.get(state, 0) < MIN_PER_STATE]
+    if short:
+        detail = ", ".join(f"{state} {counts.get(state, 0)}" for state in short)
+        raise SystemExit(
+            f"Parsed too few churches in {detail}; "
+            f"each requested state needs at least {MIN_PER_STATE}. "
+            "Leaving the directory files unchanged"
+        )
+    if len(churches) < min_expected_count(states):
+        raise SystemExit(
+            f"Parsed only {len(churches)} churches; leaving the directory files unchanged"
+        )
 
 
 def parse_states(argv: list[str] | None = None) -> list[str]:
@@ -1036,10 +1067,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Downloading {label} churches from churchofgod.org", flush=True)
     parsed = dedupe(fetch_states(REQUEST_INTERVAL_SECONDS, states))
     print(f"Parsed {len(parsed)} {label} churches", flush=True)
-    if len(parsed) < min_expected_count(states):
-        raise SystemExit(
-            f"Parsed only {len(parsed)} churches; leaving the directory files unchanged"
-        )
+    require_complete_download(states, parsed)
 
     cached = {
         address_key(church)

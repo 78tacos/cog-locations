@@ -138,6 +138,7 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["OK"], 50)
         self.assertGreaterEqual(self.counts["TX"], 240)
         self.assertGreaterEqual(len(self.churches), 3100)
+        refresh.require_complete_download(list(PUBLISHED), self.churches)
         for code in ("VA", "WV", "KY"):
             self.assertNotIn(code, self.counts)
 
