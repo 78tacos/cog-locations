@@ -15,7 +15,7 @@ A project I made because the official Church of God website is really not great 
 
 Updated monthly.
 
-**Live map:** https://78tacos.github.io/florida-churches/
+**Live map:** https://78tacos.github.io/cog-locations/
 """
 
 # Snapshot of the Florida county names the directory already uses.
@@ -421,7 +421,7 @@ class FormatTests(unittest.TestCase):
     def test_readme_keeps_josephs_opening(self):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith(JOSEPH_README))
-        self.assertIn("https://78tacos.github.io/florida-churches/", text)
+        self.assertIn("https://78tacos.github.io/cog-locations/", text)
         self.assertIn("scripts/refresh.py", text)
         self.assertIn(
             "A project I made because the official Church of God website is really not great when trying to find a location.",
