@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Florida Church of God Map
+JOSEPH_README = """# Church of God Map — Florida and Georgia
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -211,11 +211,14 @@ class ParseSampleTests(unittest.TestCase):
 class DirectoryRuleTests(unittest.TestCase):
     def test_city_groups_match_the_current_directory(self):
         churches = json.loads((ROOT / "churches.json").read_text(encoding="utf-8"))
-        florida_counties = set(refresh.FL_COUNTY_FIPS.values())
+        counties_by_state = {
+            "FL": set(refresh.FL_COUNTY_FIPS.values()),
+            "GA": set(refresh.COUNTY_FIPS_BY_STATE["13"].values()),
+        }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
             if church.get("county"):
-                self.assertIn(church["county"], florida_counties)
+                self.assertIn(church["county"], counties_by_state[church["state"]])
         self.assertEqual(refresh.city_group_for("St Petersburg"), "Saint Petersburg")
         self.assertEqual(refresh.city_group_for("St. Petersburg"), "Saint Petersburg")
         self.assertEqual(refresh.city_group_for("Brandenton"), "Bradenton")
@@ -415,6 +418,13 @@ class FormatTests(unittest.TestCase):
         self.assertTrue(text.startswith(JOSEPH_README))
         self.assertIn("https://78tacos.github.io/florida-churches/", text)
         self.assertIn("scripts/refresh.py", text)
+        self.assertIn(
+            "A project I made because the official Church of God website is really not great when trying to find a location.",
+            text,
+        )
+        self.assertIn("The published directory now includes Florida and Georgia (pilot).", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA` rebuilds it.", text)
+        self.assertNotIn("stay Florida-only", text)
 
 
 class FallbackGeocodeTests(unittest.TestCase):

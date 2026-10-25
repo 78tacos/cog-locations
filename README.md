@@ -1,4 +1,4 @@
-# Florida Church of God Map
+# Church of God Map — Florida and Georgia
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -26,7 +26,7 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 python3 scripts/refresh.py
 ```
 
-The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA`) when those states are added later; the monthly job and this repository's published directory stay Florida-only.
+The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA`). The published directory now includes Florida and Georgia (pilot). `python3 scripts/refresh.py FL GA` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA` so the next refresh keeps both states.
 
 The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/florida-churches/.
 
