@@ -18,6 +18,77 @@ Updated monthly.
 **Live map:** https://78tacos.github.io/florida-churches/
 """
 
+# Snapshot of the Florida county names the directory already uses.
+FLORIDA_COUNTY_FIPS = {
+    "001": "Alachua",
+    "003": "Baker",
+    "005": "Bay",
+    "007": "Bradford",
+    "009": "Brevard",
+    "011": "Broward",
+    "013": "Calhoun",
+    "015": "Charlotte",
+    "017": "Citrus",
+    "019": "Clay",
+    "021": "Collier",
+    "023": "Columbia",
+    "027": "DeSoto",
+    "029": "Dixie",
+    "031": "Duval",
+    "033": "Escambia",
+    "035": "Flagler",
+    "037": "Franklin",
+    "039": "Gadsden",
+    "041": "Gilchrist",
+    "043": "Glades",
+    "045": "Gulf",
+    "047": "Hamilton",
+    "049": "Hardee",
+    "051": "Hendry",
+    "053": "Hernando",
+    "055": "Highlands",
+    "057": "Hillsborough",
+    "059": "Holmes",
+    "061": "Indian River",
+    "063": "Jackson",
+    "065": "Jefferson",
+    "067": "Lafayette",
+    "069": "Lake",
+    "071": "Lee",
+    "073": "Leon",
+    "075": "Levy",
+    "077": "Liberty",
+    "079": "Madison",
+    "081": "Manatee",
+    "083": "Marion",
+    "085": "Martin",
+    "086": "Miami-Dade",
+    "087": "Monroe",
+    "089": "Nassau",
+    "091": "Okaloosa",
+    "093": "Okeechobee",
+    "095": "Orange",
+    "097": "Osceola",
+    "099": "Palm Beach",
+    "101": "Pasco",
+    "103": "Pinellas",
+    "105": "Polk",
+    "107": "Putnam",
+    "109": "St. Johns",
+    "111": "St. Lucie",
+    "113": "Santa Rosa",
+    "115": "Sarasota",
+    "117": "Seminole",
+    "119": "Sumter",
+    "121": "Suwannee",
+    "123": "Taylor",
+    "125": "Union",
+    "127": "Volusia",
+    "129": "Wakulla",
+    "131": "Walton",
+    "133": "Washington",
+}
+
 
 def _church(**overrides):
     record = {
@@ -140,8 +211,11 @@ class ParseSampleTests(unittest.TestCase):
 class DirectoryRuleTests(unittest.TestCase):
     def test_city_groups_match_the_current_directory(self):
         churches = json.loads((ROOT / "churches.json").read_text(encoding="utf-8"))
+        florida_counties = set(refresh.FL_COUNTY_FIPS.values())
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
+            if church.get("county"):
+                self.assertIn(church["county"], florida_counties)
         self.assertEqual(refresh.city_group_for("St Petersburg"), "Saint Petersburg")
         self.assertEqual(refresh.city_group_for("St. Petersburg"), "Saint Petersburg")
         self.assertEqual(refresh.city_group_for("Brandenton"), "Bradenton")
@@ -209,6 +283,21 @@ class DirectoryRuleTests(unittest.TestCase):
         self.assertEqual(refresh.FL_COUNTY_FIPS["101"], "Pasco")
         self.assertEqual(refresh.FL_COUNTY_FIPS["081"], "Manatee")
         self.assertEqual(refresh.FL_COUNTY_FIPS["115"], "Sarasota")
+        self.assertEqual(refresh.county_from_fips("12", "057"), "Hillsborough")
+        self.assertEqual(refresh.county_from_fips("12", "086"), "Miami-Dade")
+        self.assertEqual(refresh.county_from_fips("12", "109"), "St. Johns")
+        self.assertEqual(refresh.county_from_fips("12", "027"), "DeSoto")
+        self.assertEqual(refresh.county_from_fips("13", "121"), "Fulton")
+        self.assertEqual(refresh.county_from_fips("13", "051"), "Chatham")
+        self.assertEqual(refresh.county_from_fips("01", "001"), "Autauga")
+        self.assertEqual(refresh.FL_COUNTY_FIPS, FLORIDA_COUNTY_FIPS)
+
+    def test_parse_national_county_snippet(self):
+        text = "GA,13,121,Fulton County,H1\nFL,12,057,Hillsborough County,H1\n"
+        states, counties = refresh.parse_national_county(text)
+        self.assertEqual(states, {"GA": "13", "FL": "12"})
+        self.assertEqual(counties["13"]["121"], "Fulton")
+        self.assertEqual(counties["12"]["057"], "Hillsborough")
 
 
 class FormatTests(unittest.TestCase):
@@ -221,10 +310,73 @@ class FormatTests(unittest.TestCase):
                 '"4","1 Main, Tampa, FL, 33602","Match","Non_Exact","1 MAIN, TAMPA, FL, 33602","-82.45,27.95","9","L","12","57","000100","1000"',
             ]
         )
-        hits = refresh.parse_census_batch(text)
+        hits = refresh.parse_census_batch(text, {"12"})
         self.assertEqual(set(hits), {"1", "4"})
         self.assertEqual(hits["1"], (27.930365515933, -82.271565015116, "Hillsborough"))
         self.assertEqual(hits["4"][2], "Hillsborough")
+
+    def test_census_batch_requires_an_explicit_state_filter(self):
+        text = '"3","1 Peachtree St, Atlanta, GA, 30303","Match","Exact","1 PEACHTREE ST, ATLANTA, GA, 30303","-84.3,33.7","1","L","13","121","000100","1000"'
+        with self.assertRaises(TypeError):
+            refresh.parse_census_batch(text)
+        with self.assertRaises(TypeError):
+            refresh.parse_census_batch(text, None)
+        with self.assertRaises(TypeError):
+            refresh.geocode_addresses([], None)
+
+    def test_geocode_addresses_drops_a_hit_outside_the_church_state(self):
+        florida = _church(name="Florida Chapel", address1="1 Florida St")
+        georgia = _church(
+            name="Georgia Chapel",
+            state="GA",
+            address1="1 Peachtree St",
+            city="Atlanta",
+            zip="30303",
+        )
+        allow_lists: list[set[str]] = []
+
+        def fake_post(churches):
+            rows = []
+            for index, _church_row in enumerate(churches, start=1):
+                rows.append(
+                    f'"{index}","x","Match","Exact","x","-84.3,33.7","1","L","13","121","0","1"'
+                )
+            return "\n".join(rows)
+
+        original_post = refresh._post_census
+        original_parse = refresh.parse_census_batch
+
+        def spy_parse(text, state_fips):
+            allow_lists.append(set(state_fips))
+            return original_parse(text, state_fips)
+
+        refresh._post_census = fake_post
+        refresh.parse_census_batch = spy_parse
+        try:
+            hits = refresh.geocode_addresses(
+                [florida, georgia],
+                refresh.state_fips_for(["FL", "GA"]),
+                sleep=lambda _seconds: None,
+            )
+        finally:
+            refresh._post_census = original_post
+            refresh.parse_census_batch = original_parse
+        self.assertEqual(allow_lists, [{"12"}, {"13"}])
+        self.assertNotIn(refresh.address_key(florida), hits)
+        self.assertEqual(hits[refresh.address_key(georgia)], (33.7, -84.3, "Fulton"))
+
+    def test_census_batch_parser_keeps_requested_non_florida_matches(self):
+        text = "\n".join(
+            [
+                '"1","913 Dew Bloom Road, Brandon, FL, 33511","Match","Exact","913 DEW BLOOM RD, BRANDON, FL, 33511","-82.271565015116,27.930365515933","651206055","R","12","057","013312","3026"',
+                '"3","1 Peachtree St, Atlanta, GA, 30303","Match","Exact","1 PEACHTREE ST, ATLANTA, GA, 30303","-84.3,33.7","1","L","13","121","000100","1000"',
+            ]
+        )
+        florida_only = refresh.parse_census_batch(text, refresh.state_fips_for(["FL"]))
+        both = refresh.parse_census_batch(text, refresh.state_fips_for(["FL", "GA"]))
+        self.assertEqual(set(florida_only), {"1"})
+        self.assertEqual(set(both), {"1", "3"})
+        self.assertEqual(both["3"], (33.7, -84.3, "Fulton"))
 
     def test_census_csv_quotes_commas(self):
         encoded = refresh.census_csv([_church(address1="100 Main Street, Apt 2", address2="Suite 4")])
@@ -352,11 +504,24 @@ class StatewideTests(unittest.TestCase):
         calls = []
         refresh.fill_missing_counties(
             [pinned, unpinned, known],
-            lookup=lambda lat, lng: calls.append((lat, lng)) or "Polk",
+            lookup=lambda lat, lng, allowed=None: calls.append((lat, lng, set(allowed))) or "Polk",
             sleep=lambda _: None,
         )
         self.assertEqual([pinned["county"], unpinned["county"], known["county"]], ["Polk", "", "Pasco"])
-        self.assertEqual(calls, [(28.0, -82.0)])
+        self.assertEqual(calls, [(28.0, -82.0, {"12"})])
+
+    def test_missing_georgia_county_uses_georgia_fips(self):
+        pinned = refresh.make_record(
+            _church(state="GA", city="Atlanta", zip="30303"), 33.7, -84.3, False, ""
+        )
+        calls = []
+        refresh.fill_missing_counties(
+            [pinned],
+            lookup=lambda lat, lng, allowed=None: calls.append(set(allowed)) or "Fulton",
+            sleep=lambda _: None,
+        )
+        self.assertEqual(calls, [{"13"}])
+        self.assertEqual(pinned["county"], "Fulton")
 
     def test_record_without_zip_is_kept_when_it_has_contact_data(self):
         html = (
@@ -365,6 +530,149 @@ class StatewideTests(unittest.TestCase):
         )
         names = [c["name"] for c in refresh.parse_churches(html)]
         self.assertEqual(names, ["North Miami Avenue", "Next"])
+
+
+class CensusStateFilterTests(unittest.TestCase):
+    def _response(self, counties, zip_code="33602", city="Tampa", lat=27.95, lng=-82.45):
+        payload = {
+            "result": {
+                "addressMatches": [
+                    {
+                        "addressComponents": {"zip": zip_code, "city": city},
+                        "coordinates": {"x": lng, "y": lat},
+                        "geographies": {"Counties": counties},
+                    }
+                ],
+                "geographies": {"Counties": counties},
+            }
+        }
+        return json.dumps(payload).encode()
+
+    def test_point_lookup_skips_other_states_unless_asked(self):
+        raw = self._response(
+            [
+                {"STATE": "13", "COUNTY": "121"},
+                {"STATE": "12", "COUNTY": "057"},
+            ]
+        )
+        original = refresh.request_bytes
+        refresh.request_bytes = lambda url, **kwargs: raw
+        try:
+            self.assertEqual(refresh.county_for_point(27.95, -82.45), "Hillsborough")
+            self.assertEqual(refresh.county_for_point(33.7, -84.3, {"13"}), "Fulton")
+            self.assertEqual(
+                refresh.county_for_point(33.7, -84.3, refresh.state_fips_for(["GA"])),
+                "Fulton",
+            )
+        finally:
+            refresh.request_bytes = original
+
+    def test_oneline_county_follows_the_church_state(self):
+        def fake(url, **kwargs):
+            if "Peachtree" in url:
+                return self._response(
+                    [{"STATE": "13", "COUNTY": "121"}],
+                    zip_code="30303",
+                    city="Atlanta",
+                    lat=33.7,
+                    lng=-84.3,
+                )
+            if "Other" in url:
+                return self._response([{"STATE": "12", "COUNTY": "57"}])
+            return self._response([{"STATE": "13", "COUNTY": "121"}])
+
+        original = refresh.request_bytes
+        refresh.request_bytes = fake
+        try:
+            florida_hit = refresh.census_oneline(_church(), "9 Other Road")
+            outside = refresh.census_oneline(_church(), "1 Main Street")
+            georgia = refresh.census_oneline(
+                _church(state="GA", city="Atlanta", zip="30303", address1="1 Peachtree St"),
+                "1 Peachtree St",
+            )
+        finally:
+            refresh.request_bytes = original
+        self.assertEqual(florida_hit, (27.95, -82.45, "Hillsborough"))
+        self.assertEqual(outside, (27.95, -82.45, ""))
+        self.assertEqual(georgia, (33.7, -84.3, "Fulton"))
+
+
+class MultiStateCliTests(unittest.TestCase):
+    def test_default_is_florida(self):
+        self.assertEqual(refresh.parse_states([]), ["FL"])
+        self.assertEqual(refresh.region_label(["FL"]), "Florida")
+        self.assertEqual(refresh.min_expected_count(["FL"]), refresh.MIN_STATEWIDE)
+        self.assertEqual(refresh.state_fips_for(["FL"]), {"12"})
+
+    def test_normalizes_dedupes_and_keeps_order(self):
+        self.assertEqual(refresh.parse_states(["fl"]), ["FL"])
+        self.assertEqual(refresh.parse_states(["fl", "GA", "FL"]), ["FL", "GA"])
+        self.assertEqual(refresh.region_label(["FL", "GA"]), "FL and GA")
+        self.assertEqual(refresh.min_expected_count(["FL", "GA"]), refresh.MIN_STATEWIDE)
+        self.assertEqual(refresh.min_expected_count(["FL", "GA", "AL"]), refresh.MIN_STATEWIDE)
+        self.assertEqual(refresh.state_fips_for(["FL", "GA"]), {"12", "13"})
+
+    def test_rejects_unknown_state_codes(self):
+        with self.assertRaises(SystemExit):
+            refresh.parse_states(["FX"])
+        with self.assertRaises(SystemExit):
+            refresh.parse_states(["FL", "ZZ"])
+
+    def test_locator_url_uses_the_requested_state(self):
+        florida = refresh.locator_page_url("FL", 0)
+        georgia = refresh.locator_page_url("GA", 10)
+        self.assertIn("state=FL", florida)
+        self.assertIn("int_cur_position=0", florida)
+        self.assertIn("mode=citystate_search", florida)
+        self.assertIn("state=GA", georgia)
+        self.assertIn("int_cur_position=10", georgia)
+        self.assertTrue(florida.startswith(refresh.LOCATOR_URL))
+
+    def test_fetch_churches_requests_the_given_state(self):
+        urls: list[str] = []
+
+        def fake_request(url, **kwargs):
+            urls.append(url)
+            return b"<html>Results 1 to 1 of 1</html>"
+
+        original = refresh.request_bytes
+        refresh.request_bytes = fake_request
+        try:
+            refresh.fetch_churches(0, "GA")
+            refresh.fetch_churches(0, "FL")
+        finally:
+            refresh.request_bytes = original
+        self.assertIn("state=GA", urls[0])
+        self.assertIn("state=FL", urls[1])
+
+    def test_fetch_states_combines_and_pauses_between_states(self):
+        calls: list[tuple[float, str]] = []
+        sleeps: list[float] = []
+
+        def fake_fetch(delay, state="FL"):
+            calls.append((delay, state))
+            return [_church(name=state, state=state, address1=f"1 {state} Street")]
+
+        original = refresh.fetch_churches
+        refresh.fetch_churches = fake_fetch
+        try:
+            combined = refresh.fetch_states(3, ["FL", "GA"], sleep=sleeps.append)
+        finally:
+            refresh.fetch_churches = original
+        self.assertEqual(calls, [(3, "FL"), (3, "GA")])
+        self.assertEqual(sleeps, [3])
+        self.assertEqual([church["state"] for church in combined], ["FL", "GA"])
+        self.assertEqual(len(refresh.dedupe(combined)), 2)
+
+    def test_fetch_states_single_state_does_not_sleep(self):
+        sleeps: list[float] = []
+        original = refresh.fetch_churches
+        refresh.fetch_churches = lambda delay, state="FL": [_church(state=state)]
+        try:
+            refresh.fetch_states(3, ["FL"], sleep=sleeps.append)
+        finally:
+            refresh.fetch_churches = original
+        self.assertEqual(sleeps, [])
 
 
 if __name__ == "__main__":

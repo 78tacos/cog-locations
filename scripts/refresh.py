@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Rebuild the Florida Church of God directory from churchofgod.org.
+"""Rebuild the Church of God directory from churchofgod.org.
 
-The locator is paged. Pages are fetched about three seconds apart. Street
-addresses are geocoded with the US Census batch geocoder. A ZIP that does
-not match falls back to that ZIP's center point and is marked approximate.
+Defaults to Florida. Pass one or more USPS state codes to download those
+states. The locator is paged. Pages are fetched about three seconds apart.
+Street addresses are geocoded with the US Census batch geocoder. A ZIP that
+does not match falls back to that ZIP's center point and is marked approximate.
 An address that is already in churches.json keeps its saved exact coordinates.
 
 Addresses the batch geocoder misses (and saved approximate pins) go through a
@@ -17,6 +18,7 @@ records stay approximate at the ZIP center.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import io
 import json
@@ -47,6 +49,8 @@ GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "florida-churches-refresh/1.0 (+https://78tacos.github.io/florida-churches/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
+DEFAULT_STATES = ("FL",)
+NATIONAL_COUNTY_PATH = Path(__file__).with_name("national_county.txt")
 
 CONTACT_KEYS = (
     "name",
@@ -63,76 +67,92 @@ CONTACT_KEYS = (
 SCHEMA_KEYS = CONTACT_KEYS + ("lat", "lng", "approx", "county", "city_group")
 
 
-# Census county FIPS for Florida (state 12), without the state prefix.
-FL_COUNTY_FIPS = {
-    "001": "Alachua",
-    "003": "Baker",
-    "005": "Bay",
-    "007": "Bradford",
-    "009": "Brevard",
-    "011": "Broward",
-    "013": "Calhoun",
-    "015": "Charlotte",
-    "017": "Citrus",
-    "019": "Clay",
-    "021": "Collier",
-    "023": "Columbia",
-    "027": "DeSoto",
-    "029": "Dixie",
-    "031": "Duval",
-    "033": "Escambia",
-    "035": "Flagler",
-    "037": "Franklin",
-    "039": "Gadsden",
-    "041": "Gilchrist",
-    "043": "Glades",
-    "045": "Gulf",
-    "047": "Hamilton",
-    "049": "Hardee",
-    "051": "Hendry",
-    "053": "Hernando",
-    "055": "Highlands",
-    "057": "Hillsborough",
-    "059": "Holmes",
-    "061": "Indian River",
-    "063": "Jackson",
-    "065": "Jefferson",
-    "067": "Lafayette",
-    "069": "Lake",
-    "071": "Lee",
-    "073": "Leon",
-    "075": "Levy",
-    "077": "Liberty",
-    "079": "Madison",
-    "081": "Manatee",
-    "083": "Marion",
-    "085": "Martin",
-    "086": "Miami-Dade",
-    "087": "Monroe",
-    "089": "Nassau",
-    "091": "Okaloosa",
-    "093": "Okeechobee",
-    "095": "Orange",
-    "097": "Osceola",
-    "099": "Palm Beach",
-    "101": "Pasco",
-    "103": "Pinellas",
-    "105": "Polk",
-    "107": "Putnam",
-    "109": "St. Johns",
-    "111": "St. Lucie",
-    "113": "Santa Rosa",
-    "115": "Sarasota",
-    "117": "Seminole",
-    "119": "Sumter",
-    "121": "Suwannee",
-    "123": "Taylor",
-    "125": "Union",
-    "127": "Volusia",
-    "129": "Wakulla",
-    "131": "Walton",
-    "133": "Washington",
-}
+def _strip_county(name: str) -> str:
+    return re.sub(r"\s+County$", "", (name or "").strip())
+
+
+def parse_national_county(text: str) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    """Parse Census national_county.txt into state and county FIPS tables.
+
+    Names drop a trailing " County" so Florida stays Alachua, Hillsborough,
+    Miami-Dade, St. Johns, and the rest of the existing directory values.
+    Source: https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt
+    """
+    state_fips: dict[str, str] = {}
+    counties: dict[str, dict[str, str]] = {}
+    for line in text.splitlines():
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) < 4:
+            continue
+        postal, sfips, cfips, name = parts[0], parts[1], parts[2], parts[3]
+        if len(postal) != 2 or len(sfips) != 2 or not sfips.isdigit():
+            continue
+        if len(cfips) != 3 or not cfips.isdigit():
+            continue
+        state_fips[postal.upper()] = sfips
+        counties.setdefault(sfips, {})[cfips] = _strip_county(name)
+    return state_fips, counties
+
+
+def load_national_counties(
+    path: Path = NATIONAL_COUNTY_PATH,
+) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    return parse_national_county(path.read_text(encoding="utf-8"))
+
+
+US_STATE_FIPS, COUNTY_FIPS_BY_STATE = load_national_counties()
+FL_COUNTY_FIPS = COUNTY_FIPS_BY_STATE["12"]
+
+
+def county_from_fips(state_fips: str, county_fips: str) -> str:
+    state = str(state_fips or "").strip().zfill(2)
+    county = str(county_fips or "").strip().zfill(3)
+    return COUNTY_FIPS_BY_STATE.get(state, {}).get(county, "")
+
+
+def state_fips_for(states: list[str]) -> set[str]:
+    return {US_STATE_FIPS[code] for code in states}
+
+
+# Historical Census filter: a Florida-only run keeps state FIPS 12 and drops the rest.
+FLORIDA_STATE_FIPS = frozenset({"12"})
+
+
+def normalize_state_fips(state_fips: set[str] | frozenset[str]) -> frozenset[str]:
+    """Normalize an explicit state-FIPS allow-list.
+
+    None is rejected. Callers pass the states they mean, including {"12"} for
+    a Florida-only run. There is no keep-every-state default.
+    """
+    if state_fips is None:
+        raise TypeError("allowed state FIPS set is required")
+    return frozenset(str(code).strip().zfill(2) for code in state_fips)
+
+
+def allowed_fips_for_church(church: dict) -> frozenset[str]:
+    """Census state FIPS whose county name may be stored on this church.
+
+    Florida addresses still accept only FIPS 12. Another state's address accepts
+    that state's FIPS. An unknown state keeps the Florida filter.
+    """
+    code = str(church.get("state") or "").strip().upper()
+    fips = US_STATE_FIPS.get(code)
+    if fips:
+        return frozenset({fips})
+    return FLORIDA_STATE_FIPS
+
+
+def census_county_name(
+    state_fips: str,
+    county_fips: str,
+    allowed_state_fips: set[str] | frozenset[str],
+) -> str:
+    allowed = normalize_state_fips(allowed_state_fips)
+    state = str(state_fips or "").strip().zfill(2)
+    if state not in allowed:
+        return ""
+    return county_from_fips(state, county_fips)
+
 
 _CITY_GROUPS = {
     "st petersburg": "Saint Petersburg",
@@ -299,8 +319,18 @@ def has_pin(church: dict) -> bool:
 CENSUS_COORDS_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
 
 
-def county_for_point(lat: float, lng: float) -> str:
-    """Florida county containing a point, from the Census geographies endpoint."""
+def county_for_point(
+    lat: float,
+    lng: float,
+    allowed_state_fips: set[str] | frozenset[str] | None = None,
+) -> str:
+    """County containing a point, from the Census geographies endpoint.
+
+    The default allow-list is Florida (FIPS 12). Pass the church's state FIPS
+    to resolve a county in another requested state.
+    """
+    if allowed_state_fips is None:
+        allowed_state_fips = FLORIDA_STATE_FIPS
     params = urllib.parse.urlencode(
         {
             "x": lng,
@@ -313,8 +343,9 @@ def county_for_point(lat: float, lng: float) -> str:
     )
     data = json.loads(request_bytes(f"{CENSUS_COORDS_URL}?{params}", timeout=60))
     for county in data.get("result", {}).get("geographies", {}).get("Counties", []):
-        if county.get("STATE") == "12":
-            return FL_COUNTY_FIPS.get(county.get("COUNTY", ""), "")
+        name = census_county_name(county.get("STATE", ""), county.get("COUNTY", ""), allowed_state_fips)
+        if name:
+            return name
     return ""
 
 
@@ -323,7 +354,7 @@ def fill_missing_counties(churches: list[dict], lookup=county_for_point, sleep=t
         if church.get("county") or not has_pin(church):
             continue
         try:
-            church["county"] = lookup(church["lat"], church["lng"]) or ""
+            church["county"] = lookup(church["lat"], church["lng"], allowed_fips_for_church(church)) or ""
         except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as error:
             print(f"  county lookup failed for {church['name']}: {error}", file=sys.stderr)
         sleep(1.0)
@@ -378,10 +409,6 @@ def _same_place(church: dict, zip_code: str, city: str) -> bool:
     return bool(city) and _norm(city_group_for(city)) == _norm(clean_city(church.get("city", "")))
 
 
-def _strip_county(name: str) -> str:
-    return re.sub(r"\s+County$", "", (name or "").strip())
-
-
 AMBIGUOUS_METERS = 150
 NEIGHBORHOOD_METERS = 1500
 
@@ -427,8 +454,12 @@ def census_oneline(church: dict, street: str) -> tuple[float, float, str] | None
             continue
         counties = match.get("geographies", {}).get("Counties", [])
         county = ""
-        if counties and counties[0].get("STATE") == "12":
-            county = FL_COUNTY_FIPS.get(counties[0].get("COUNTY", ""), "")
+        if counties:
+            county = census_county_name(
+                counties[0].get("STATE", ""),
+                counties[0].get("COUNTY", ""),
+                allowed_fips_for_church(church),
+            )
         coords = match["coordinates"]
         points.append((float(coords["y"]), float(coords["x"]), county))
     return _pick(points)
@@ -603,23 +634,31 @@ def render_js(churches: list[dict]) -> str:
     return "const CHURCHES=" + json.dumps(churches) + ";"
 
 
-def parse_census_batch(text: str) -> dict[str, tuple[float, float, str]]:
-    """Map a Census batch id to (lat, lng, county) for Florida matches.
+def parse_census_batch(
+    text: str,
+    state_fips: set[str] | frozenset[str],
+) -> dict[str, tuple[float, float, str]]:
+    """Map a Census batch id to (lat, lng, county).
+
+    state_fips is required. A Florida-only run passes {"12"} and drops every
+    other state. There is no default that keeps matches from all states.
 
     Columns, when a row matches, are: id, input address, status, match type,
     matched address, lon,lat, tiger line id, side, state FIPS, county FIPS.
     """
     if "Match" not in text and "No_Match" not in text:
         raise RuntimeError("Census geocoder returned an unexpected response")
+    allowed = normalize_state_fips(state_fips)
     hits: dict[str, tuple[float, float, str]] = {}
     reader = csv.reader(io.StringIO(text.lstrip("\ufeff")))
     for row in reader:
         if len(row) < 10 or row[2].strip() != "Match":
             continue
-        if row[8].strip().zfill(2) != "12":
+        row_state = row[8].strip().zfill(2)
+        if row_state not in allowed:
             continue
         lon_text, lat_text = row[5].split(",")
-        county = FL_COUNTY_FIPS.get(row[9].strip().zfill(3), "")
+        county = county_from_fips(row_state, row[9])
         hits[row[0].strip()] = (float(lat_text), float(lon_text), county)
     return hits
 
@@ -729,7 +768,19 @@ def decode_html(raw: bytes) -> str:
     return raw.decode(encoding, "replace")
 
 
-def fetch_churches(delay: float) -> list[dict]:
+def locator_page_url(state: str, offset: int) -> str:
+    query = urllib.parse.urlencode(
+        {
+            "state": state,
+            "int_cur_position": offset,
+            "mode": "citystate_search",
+            "searchtext": "",
+        }
+    )
+    return f"{LOCATOR_URL}?{query}"
+
+
+def fetch_churches(delay: float, state: str = "FL") -> list[dict]:
     offset = 0
     churches: list[dict] = []
     seen_offsets: set[int] = set()
@@ -737,10 +788,7 @@ def fetch_churches(delay: float) -> list[dict]:
         if offset in seen_offsets:
             break
         seen_offsets.add(offset)
-        url = (
-            f"{LOCATOR_URL}?state=FL&int_cur_position={offset}"
-            "&mode=citystate_search&searchtext="
-        )
+        url = locator_page_url(state, offset)
         print(f"Fetching offset {offset}", flush=True)
         html = decode_html(request_bytes(url, timeout=60))
         churches.extend(parse_churches(html))
@@ -754,6 +802,18 @@ def fetch_churches(delay: float) -> list[dict]:
         offset = end
         time.sleep(delay)
     raise RuntimeError("Stopped after too many locator pages")
+
+
+def fetch_states(delay: float, states: list[str], sleep=time.sleep) -> list[dict]:
+    """Download each requested state with the same paging and pause as today."""
+    churches: list[dict] = []
+    for index, state in enumerate(states):
+        if index:
+            sleep(delay)
+        if len(states) > 1:
+            print(f"Fetching {state}", flush=True)
+        churches.extend(fetch_churches(delay, state))
+    return churches
 
 
 def dedupe(churches: list[dict]) -> list[dict]:
@@ -799,7 +859,18 @@ def _post_census(churches: list[dict]) -> str:
 
 def geocode_addresses(
     churches: list[dict],
+    state_fips: set[str] | frozenset[str],
+    sleep=time.sleep,
 ) -> dict[tuple[str, str, str, str, str], tuple[float, float, str]]:
+    """Batch-geocode addresses, keeping a hit only for the church's own state.
+
+    state_fips is the set of states this run requested. A church still accepts
+    a match only when that match is in allowed_fips_for_church(church). On
+    FL GA, a Florida address that Census places in Georgia is dropped, the
+    same as an FL-only run. Churches are geocoded per state so the batch
+    filter is never the union of every requested state.
+    """
+    requested = normalize_state_fips(state_fips)
     unique: list[dict] = []
     seen: set[tuple[str, str, str, str, str]] = set()
     for church in churches:
@@ -808,17 +879,25 @@ def geocode_addresses(
             continue
         seen.add(key)
         unique.append(church)
+    groups: dict[frozenset[str], list[dict]] = defaultdict(list)
+    for church in unique:
+        own = allowed_fips_for_church(church) & requested
+        if own:
+            groups[own].append(church)
     hits: dict[tuple[str, str, str, str, str], tuple[float, float, str]] = {}
     chunk_size = 5000
-    for start in range(0, len(unique), chunk_size):
-        chunk = unique[start : start + chunk_size]
-        parsed = parse_census_batch(_post_census(chunk))
-        for index, church in enumerate(chunk, start=1):
-            hit = parsed.get(str(index))
-            if hit is not None:
-                hits[address_key(church)] = hit
-        if start + chunk_size < len(unique):
-            time.sleep(REQUEST_INTERVAL_SECONDS)
+    for group_index, (own, group) in enumerate(groups.items()):
+        if group_index:
+            sleep(REQUEST_INTERVAL_SECONDS)
+        for start in range(0, len(group), chunk_size):
+            if start:
+                sleep(REQUEST_INTERVAL_SECONDS)
+            chunk = group[start : start + chunk_size]
+            parsed = parse_census_batch(_post_census(chunk), own)
+            for index, church in enumerate(chunk, start=1):
+                hit = parsed.get(str(index))
+                if hit is not None:
+                    hits[address_key(church)] = hit
     return hits
 
 
@@ -894,14 +973,58 @@ def write_outputs(json_path: Path, js_path: Path, churches: list[dict]) -> None:
     atomic_write(js_path, render_js(churches))
 
 
-def main() -> None:
+def region_label(states: list[str]) -> str:
+    if list(states) == ["FL"]:
+        return "Florida"
+    if len(states) == 1:
+        return states[0]
+    return f"{', '.join(states[:-1])} and {states[-1]}"
+
+
+def min_expected_count(states: list[str]) -> int:
+    """Refuse to write when the combined download is below MIN_STATEWIDE.
+
+    The floor is 100 churches total for whatever states were requested. It does
+    not grow with how many states were requested. FL alone still requires 100.
+    """
+    return MIN_STATEWIDE
+
+
+def parse_states(argv: list[str] | None = None) -> list[str]:
+    parser = argparse.ArgumentParser(
+        prog="scripts/refresh.py",
+        description="Rebuild the Church of God directory from churchofgod.org. Defaults to Florida.",
+    )
+    parser.add_argument(
+        "states",
+        nargs="*",
+        default=list(DEFAULT_STATES),
+        metavar="STATE",
+        help="USPS state codes to download (default: FL)",
+    )
+    args = parser.parse_args(argv)
+    states: list[str] = []
+    seen: set[str] = set()
+    for raw in args.states:
+        code = raw.strip().upper()
+        if code not in US_STATE_FIPS:
+            parser.error(f"unknown US state code: {raw}")
+        if code not in seen:
+            seen.add(code)
+            states.append(code)
+    return states or list(DEFAULT_STATES)
+
+
+def main(argv: list[str] | None = None) -> None:
+    states = parse_states(argv)
+    label = region_label(states)
     json_path = ROOT / "churches.json"
     js_path = ROOT / "churches.js"
     existing = load_existing(json_path)
-    print("Downloading Florida churches from churchofgod.org", flush=True)
-    parsed = dedupe(fetch_churches(REQUEST_INTERVAL_SECONDS))
-    print(f"Parsed {len(parsed)} Florida churches", flush=True)
-    if len(parsed) < MIN_STATEWIDE:
+    print(f"Downloading {label} churches from churchofgod.org", flush=True)
+    parsed = dedupe(fetch_states(REQUEST_INTERVAL_SECONDS, states))
+    print(f"Parsed {len(parsed)} {label} churches", flush=True)
+    if len(parsed) < min_expected_count(states):
         raise SystemExit(
             f"Parsed only {len(parsed)} churches; leaving the directory files unchanged"
         )
@@ -917,7 +1040,8 @@ def main() -> None:
         f"reusing saved locations for the rest",
         flush=True,
     )
-    census_hits = geocode_addresses(needs_geocode) if needs_geocode else {}
+    allowed_fips = state_fips_for(states)
+    census_hits = geocode_addresses(needs_geocode, allowed_fips) if needs_geocode else {}
     retried: set[tuple[str, str, str, str, str]] = set()
     for church in needs_geocode:
         key = address_key(church)
@@ -937,12 +1061,12 @@ def main() -> None:
     centroids = load_postal_centroids(unresolved) if unresolved else {}
     located = resolve_locations(parsed, existing, census_hits, centroids)
     fill_missing_counties(located)
-    # Every Florida record is kept; the county field is informational.
+    # Every record is kept; the county field is informational.
     selected = order_churches(located, existing)
     unlocated = [church for church in selected if not has_pin(church)]
     approx = sum(1 for church in selected if church["approx"])
     print(
-        f"Keeping {len(selected)} Florida churches ({approx} approximate, "
+        f"Keeping {len(selected)} {label} churches ({approx} approximate, "
         f"{len(unlocated)} without a map pin)",
         flush=True,
     )
