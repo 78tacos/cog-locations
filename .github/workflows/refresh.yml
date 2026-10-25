@@ -11,7 +11,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -22,8 +22,8 @@ jobs:
           python-version: "3.12"
 
       - name: Refresh church data
-        # Florida-only would rewrite churches.json and drop Georgia on the next run.
-        run: python scripts/refresh.py FL GA
+        # A shorter state list would rewrite churches.json and drop published states.
+        run: python scripts/refresh.py FL GA AL SC NC TN MS
 
       - name: Commit to main when the data changed
         run: |
@@ -34,5 +34,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- churches.json churches.js
-          git commit -m "Refresh Florida and Georgia church directory"
+          git commit -m "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi church directory"
           git push origin HEAD:main

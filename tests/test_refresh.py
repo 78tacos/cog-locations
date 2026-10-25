@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Church of God Map — Florida and Georgia
+JOSEPH_README = """# Church of God Map — Florida and the Southeast
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -214,6 +214,11 @@ class DirectoryRuleTests(unittest.TestCase):
         counties_by_state = {
             "FL": set(refresh.FL_COUNTY_FIPS.values()),
             "GA": set(refresh.COUNTY_FIPS_BY_STATE["13"].values()),
+            "AL": set(refresh.COUNTY_FIPS_BY_STATE["01"].values()),
+            "SC": set(refresh.COUNTY_FIPS_BY_STATE["45"].values()),
+            "NC": set(refresh.COUNTY_FIPS_BY_STATE["37"].values()),
+            "TN": set(refresh.COUNTY_FIPS_BY_STATE["47"].values()),
+            "MS": set(refresh.COUNTY_FIPS_BY_STATE["28"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -422,9 +427,13 @@ class FormatTests(unittest.TestCase):
             "A project I made because the official Church of God website is really not great when trying to find a location.",
             text,
         )
-        self.assertIn("The published directory now includes Florida and Georgia (pilot).", text)
-        self.assertIn("`python3 scripts/refresh.py FL GA` rebuilds it.", text)
+        self.assertIn(
+            "The published directory now includes Florida and the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi).",
+            text,
+        )
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS` rebuilds it.", text)
         self.assertNotIn("stay Florida-only", text)
+        self.assertNotIn("Florida and Georgia (pilot)", text)
 
 
 class FallbackGeocodeTests(unittest.TestCase):
@@ -532,6 +541,24 @@ class StatewideTests(unittest.TestCase):
         )
         self.assertEqual(calls, [{"13"}])
         self.assertEqual(pinned["county"], "Fulton")
+
+    def test_short_zip4_still_parses_city_state_and_five_digit_zip(self):
+        html = (
+            "<p><b>Cornerstone Church of God</b></p><p>Pastor: Chad Edward Balentine</p>"
+            "<p>804 Lake Road</p><p>Dyersburg, TN, 38025-152</p>"
+            "<p>Phone: (731) 285-1577</p>"
+            "<p><b>The Carpenters House</b></p><p>Pastor: Robert E Coburn</p>"
+            "<p>3055 US Hwy 31 North</p><p>Marbury, AL, 36051-302</p>"
+            "<p>Phone: (205) 217-2600</p>"
+        )
+        churches = refresh.parse_churches(html)
+        self.assertEqual(
+            [(c["name"], c["city"], c["state"], c["zip"], c["address2"]) for c in churches],
+            [
+                ("Cornerstone Church of God", "Dyersburg", "TN", "38025", ""),
+                ("The Carpenters House", "Marbury", "AL", "36051", ""),
+            ],
+        )
 
     def test_record_without_zip_is_kept_when_it_has_contact_data(self):
         html = (
