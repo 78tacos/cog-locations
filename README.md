@@ -26,6 +26,8 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 python3 scripts/refresh.py
 ```
 
+The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA`) when those states are added later; the monthly job and this repository's published directory stay Florida-only.
+
 The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/florida-churches/.
 
 ## Monthly update

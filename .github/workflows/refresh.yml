@@ -22,7 +22,7 @@ jobs:
           python-version: "3.12"
 
       - name: Refresh church data
-        run: python scripts/refresh.py
+        run: python scripts/refresh.py FL
 
       - name: Commit to main when the data changed
         run: |
