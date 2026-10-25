@@ -114,6 +114,42 @@ def state_fips_for(states: list[str]) -> set[str]:
     return {US_STATE_FIPS[code] for code in states}
 
 
+# Historical Census filter: a Florida-only run keeps state FIPS 12 and drops the rest.
+FLORIDA_STATE_FIPS = frozenset({"12"})
+
+
+def normalize_state_fips(state_fips: set[str] | frozenset[str] | None) -> frozenset[str]:
+    """Normalize a state-FIPS allow-list. None means Florida, the historical default."""
+    if state_fips is None:
+        return FLORIDA_STATE_FIPS
+    return frozenset(str(code).strip().zfill(2) for code in state_fips)
+
+
+def allowed_fips_for_church(church: dict) -> frozenset[str]:
+    """Census state FIPS whose county name may be stored on this church.
+
+    Florida addresses still accept only FIPS 12. Another state's address accepts
+    that state's FIPS. An unknown state keeps the Florida filter.
+    """
+    code = str(church.get("state") or "").strip().upper()
+    fips = US_STATE_FIPS.get(code)
+    if fips:
+        return frozenset({fips})
+    return FLORIDA_STATE_FIPS
+
+
+def census_county_name(
+    state_fips: str,
+    county_fips: str,
+    allowed_state_fips: set[str] | frozenset[str] | None = None,
+) -> str:
+    allowed = normalize_state_fips(allowed_state_fips)
+    state = str(state_fips or "").strip().zfill(2)
+    if state not in allowed:
+        return ""
+    return county_from_fips(state, county_fips)
+
+
 _CITY_GROUPS = {
     "st petersburg": "Saint Petersburg",
     "st. petersburg": "Saint Petersburg",
@@ -279,8 +315,16 @@ def has_pin(church: dict) -> bool:
 CENSUS_COORDS_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
 
 
-def county_for_point(lat: float, lng: float) -> str:
-    """County containing a point, from the Census geographies endpoint."""
+def county_for_point(
+    lat: float,
+    lng: float,
+    allowed_state_fips: set[str] | frozenset[str] | None = None,
+) -> str:
+    """County containing a point, from the Census geographies endpoint.
+
+    The default allow-list is Florida (FIPS 12). Pass the church's state FIPS
+    to resolve a county in another requested state.
+    """
     params = urllib.parse.urlencode(
         {
             "x": lng,
@@ -293,7 +337,7 @@ def county_for_point(lat: float, lng: float) -> str:
     )
     data = json.loads(request_bytes(f"{CENSUS_COORDS_URL}?{params}", timeout=60))
     for county in data.get("result", {}).get("geographies", {}).get("Counties", []):
-        name = county_from_fips(county.get("STATE", ""), county.get("COUNTY", ""))
+        name = census_county_name(county.get("STATE", ""), county.get("COUNTY", ""), allowed_state_fips)
         if name:
             return name
     return ""
@@ -304,7 +348,7 @@ def fill_missing_counties(churches: list[dict], lookup=county_for_point, sleep=t
         if church.get("county") or not has_pin(church):
             continue
         try:
-            church["county"] = lookup(church["lat"], church["lng"]) or ""
+            church["county"] = lookup(church["lat"], church["lng"], allowed_fips_for_church(church)) or ""
         except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as error:
             print(f"  county lookup failed for {church['name']}: {error}", file=sys.stderr)
         sleep(1.0)
@@ -405,7 +449,11 @@ def census_oneline(church: dict, street: str) -> tuple[float, float, str] | None
         counties = match.get("geographies", {}).get("Counties", [])
         county = ""
         if counties:
-            county = county_from_fips(counties[0].get("STATE", ""), counties[0].get("COUNTY", ""))
+            county = census_county_name(
+                counties[0].get("STATE", ""),
+                counties[0].get("COUNTY", ""),
+                allowed_fips_for_church(church),
+            )
         coords = match["coordinates"]
         points.append((float(coords["y"]), float(coords["x"]), county))
     return _pick(points)
@@ -586,22 +634,23 @@ def parse_census_batch(
 ) -> dict[str, tuple[float, float, str]]:
     """Map a Census batch id to (lat, lng, county).
 
-    When state_fips is given, only matches in those states are kept. A Florida-only
-    run passes {"12"} so out-of-state hits are still dropped.
+    state_fips is the allow-list. The default is Florida (FIPS 12), so a
+    Florida-only run still drops out-of-state hits. Pass the requested states
+    to keep those matches.
 
     Columns, when a row matches, are: id, input address, status, match type,
     matched address, lon,lat, tiger line id, side, state FIPS, county FIPS.
     """
     if "Match" not in text and "No_Match" not in text:
         raise RuntimeError("Census geocoder returned an unexpected response")
-    allowed = None if state_fips is None else {code.strip().zfill(2) for code in state_fips}
+    allowed = normalize_state_fips(state_fips)
     hits: dict[str, tuple[float, float, str]] = {}
     reader = csv.reader(io.StringIO(text.lstrip("\ufeff")))
     for row in reader:
         if len(row) < 10 or row[2].strip() != "Match":
             continue
         row_state = row[8].strip().zfill(2)
-        if allowed is not None and row_state not in allowed:
+        if row_state not in allowed:
             continue
         lon_text, lat_text = row[5].split(",")
         county = county_from_fips(row_state, row[9])

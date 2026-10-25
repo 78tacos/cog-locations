@@ -314,6 +314,8 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(set(hits), {"1", "4"})
         self.assertEqual(hits["1"], (27.930365515933, -82.271565015116, "Hillsborough"))
         self.assertEqual(hits["4"][2], "Hillsborough")
+        # Omitting the allow-list is the Florida filter, same as an FL-only run.
+        self.assertEqual(set(refresh.parse_census_batch(text)), {"1", "4"})
 
     def test_census_batch_parser_keeps_requested_non_florida_matches(self):
         text = "\n".join(
@@ -454,11 +456,24 @@ class StatewideTests(unittest.TestCase):
         calls = []
         refresh.fill_missing_counties(
             [pinned, unpinned, known],
-            lookup=lambda lat, lng: calls.append((lat, lng)) or "Polk",
+            lookup=lambda lat, lng, allowed=None: calls.append((lat, lng, set(allowed))) or "Polk",
             sleep=lambda _: None,
         )
         self.assertEqual([pinned["county"], unpinned["county"], known["county"]], ["Polk", "", "Pasco"])
-        self.assertEqual(calls, [(28.0, -82.0)])
+        self.assertEqual(calls, [(28.0, -82.0, {"12"})])
+
+    def test_missing_georgia_county_uses_georgia_fips(self):
+        pinned = refresh.make_record(
+            _church(state="GA", city="Atlanta", zip="30303"), 33.7, -84.3, False, ""
+        )
+        calls = []
+        refresh.fill_missing_counties(
+            [pinned],
+            lookup=lambda lat, lng, allowed=None: calls.append(set(allowed)) or "Fulton",
+            sleep=lambda _: None,
+        )
+        self.assertEqual(calls, [{"13"}])
+        self.assertEqual(pinned["county"], "Fulton")
 
     def test_record_without_zip_is_kept_when_it_has_contact_data(self):
         html = (
@@ -467,6 +482,71 @@ class StatewideTests(unittest.TestCase):
         )
         names = [c["name"] for c in refresh.parse_churches(html)]
         self.assertEqual(names, ["North Miami Avenue", "Next"])
+
+
+class CensusStateFilterTests(unittest.TestCase):
+    def _response(self, counties, zip_code="33602", city="Tampa", lat=27.95, lng=-82.45):
+        payload = {
+            "result": {
+                "addressMatches": [
+                    {
+                        "addressComponents": {"zip": zip_code, "city": city},
+                        "coordinates": {"x": lng, "y": lat},
+                        "geographies": {"Counties": counties},
+                    }
+                ],
+                "geographies": {"Counties": counties},
+            }
+        }
+        return json.dumps(payload).encode()
+
+    def test_point_lookup_skips_other_states_unless_asked(self):
+        raw = self._response(
+            [
+                {"STATE": "13", "COUNTY": "121"},
+                {"STATE": "12", "COUNTY": "057"},
+            ]
+        )
+        original = refresh.request_bytes
+        refresh.request_bytes = lambda url, **kwargs: raw
+        try:
+            self.assertEqual(refresh.county_for_point(27.95, -82.45), "Hillsborough")
+            self.assertEqual(refresh.county_for_point(33.7, -84.3, {"13"}), "Fulton")
+            self.assertEqual(
+                refresh.county_for_point(33.7, -84.3, refresh.state_fips_for(["GA"])),
+                "Fulton",
+            )
+        finally:
+            refresh.request_bytes = original
+
+    def test_oneline_county_follows_the_church_state(self):
+        def fake(url, **kwargs):
+            if "Peachtree" in url:
+                return self._response(
+                    [{"STATE": "13", "COUNTY": "121"}],
+                    zip_code="30303",
+                    city="Atlanta",
+                    lat=33.7,
+                    lng=-84.3,
+                )
+            if "Other" in url:
+                return self._response([{"STATE": "12", "COUNTY": "57"}])
+            return self._response([{"STATE": "13", "COUNTY": "121"}])
+
+        original = refresh.request_bytes
+        refresh.request_bytes = fake
+        try:
+            florida_hit = refresh.census_oneline(_church(), "9 Other Road")
+            outside = refresh.census_oneline(_church(), "1 Main Street")
+            georgia = refresh.census_oneline(
+                _church(state="GA", city="Atlanta", zip="30303", address1="1 Peachtree St"),
+                "1 Peachtree St",
+            )
+        finally:
+            refresh.request_bytes = original
+        self.assertEqual(florida_hit, (27.95, -82.45, "Hillsborough"))
+        self.assertEqual(outside, (27.95, -82.45, ""))
+        self.assertEqual(georgia, (33.7, -84.3, "Fulton"))
 
 
 class MultiStateCliTests(unittest.TestCase):
