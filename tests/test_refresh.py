@@ -324,6 +324,47 @@ class FormatTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             refresh.geocode_addresses([], None)
 
+    def test_geocode_addresses_drops_a_hit_outside_the_church_state(self):
+        florida = _church(name="Florida Chapel", address1="1 Florida St")
+        georgia = _church(
+            name="Georgia Chapel",
+            state="GA",
+            address1="1 Peachtree St",
+            city="Atlanta",
+            zip="30303",
+        )
+        allow_lists: list[set[str]] = []
+
+        def fake_post(churches):
+            rows = []
+            for index, _church_row in enumerate(churches, start=1):
+                rows.append(
+                    f'"{index}","x","Match","Exact","x","-84.3,33.7","1","L","13","121","0","1"'
+                )
+            return "\n".join(rows)
+
+        original_post = refresh._post_census
+        original_parse = refresh.parse_census_batch
+
+        def spy_parse(text, state_fips):
+            allow_lists.append(set(state_fips))
+            return original_parse(text, state_fips)
+
+        refresh._post_census = fake_post
+        refresh.parse_census_batch = spy_parse
+        try:
+            hits = refresh.geocode_addresses(
+                [florida, georgia],
+                refresh.state_fips_for(["FL", "GA"]),
+                sleep=lambda _seconds: None,
+            )
+        finally:
+            refresh._post_census = original_post
+            refresh.parse_census_batch = original_parse
+        self.assertEqual(allow_lists, [{"12"}, {"13"}])
+        self.assertNotIn(refresh.address_key(florida), hits)
+        self.assertEqual(hits[refresh.address_key(georgia)], (33.7, -84.3, "Fulton"))
+
     def test_census_batch_parser_keeps_requested_non_florida_matches(self):
         text = "\n".join(
             [
@@ -567,7 +608,8 @@ class MultiStateCliTests(unittest.TestCase):
         self.assertEqual(refresh.parse_states(["fl"]), ["FL"])
         self.assertEqual(refresh.parse_states(["fl", "GA", "FL"]), ["FL", "GA"])
         self.assertEqual(refresh.region_label(["FL", "GA"]), "FL and GA")
-        self.assertEqual(refresh.min_expected_count(["FL", "GA"]), refresh.MIN_STATEWIDE * 2)
+        self.assertEqual(refresh.min_expected_count(["FL", "GA"]), refresh.MIN_STATEWIDE)
+        self.assertEqual(refresh.min_expected_count(["FL", "GA", "AL"]), refresh.MIN_STATEWIDE)
         self.assertEqual(refresh.state_fips_for(["FL", "GA"]), {"12", "13"})
 
     def test_rejects_unknown_state_codes(self):

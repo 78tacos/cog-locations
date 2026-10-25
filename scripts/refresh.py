@@ -860,8 +860,17 @@ def _post_census(churches: list[dict]) -> str:
 def geocode_addresses(
     churches: list[dict],
     state_fips: set[str] | frozenset[str],
+    sleep=time.sleep,
 ) -> dict[tuple[str, str, str, str, str], tuple[float, float, str]]:
-    allowed = normalize_state_fips(state_fips)
+    """Batch-geocode addresses, keeping a hit only for the church's own state.
+
+    state_fips is the set of states this run requested. A church still accepts
+    a match only when that match is in allowed_fips_for_church(church). On
+    FL GA, a Florida address that Census places in Georgia is dropped, the
+    same as an FL-only run. Churches are geocoded per state so the batch
+    filter is never the union of every requested state.
+    """
+    requested = normalize_state_fips(state_fips)
     unique: list[dict] = []
     seen: set[tuple[str, str, str, str, str]] = set()
     for church in churches:
@@ -870,17 +879,25 @@ def geocode_addresses(
             continue
         seen.add(key)
         unique.append(church)
+    groups: dict[frozenset[str], list[dict]] = defaultdict(list)
+    for church in unique:
+        own = allowed_fips_for_church(church) & requested
+        if own:
+            groups[own].append(church)
     hits: dict[tuple[str, str, str, str, str], tuple[float, float, str]] = {}
     chunk_size = 5000
-    for start in range(0, len(unique), chunk_size):
-        chunk = unique[start : start + chunk_size]
-        parsed = parse_census_batch(_post_census(chunk), allowed)
-        for index, church in enumerate(chunk, start=1):
-            hit = parsed.get(str(index))
-            if hit is not None:
-                hits[address_key(church)] = hit
-        if start + chunk_size < len(unique):
-            time.sleep(REQUEST_INTERVAL_SECONDS)
+    for group_index, (own, group) in enumerate(groups.items()):
+        if group_index:
+            sleep(REQUEST_INTERVAL_SECONDS)
+        for start in range(0, len(group), chunk_size):
+            if start:
+                sleep(REQUEST_INTERVAL_SECONDS)
+            chunk = group[start : start + chunk_size]
+            parsed = parse_census_batch(_post_census(chunk), own)
+            for index, church in enumerate(chunk, start=1):
+                hit = parsed.get(str(index))
+                if hit is not None:
+                    hits[address_key(church)] = hit
     return hits
 
 
@@ -965,7 +982,12 @@ def region_label(states: list[str]) -> str:
 
 
 def min_expected_count(states: list[str]) -> int:
-    return MIN_STATEWIDE * len(states)
+    """Refuse to write when the combined download is below MIN_STATEWIDE.
+
+    The floor is 100 churches total for whatever states were requested. It does
+    not grow with how many states were requested. FL alone still requires 100.
+    """
+    return MIN_STATEWIDE
 
 
 def parse_states(argv: list[str] | None = None) -> list[str]:
