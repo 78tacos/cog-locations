@@ -1,14 +1,14 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Church of God Directory — Florida and Georgia</title>
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Church of God Directory — Florida and the Southeast</title>
 <style>body{font-family:system-ui,sans-serif;max-width:900px;margin:20px auto;padding:0 12px;font-size:14px}h2{border-bottom:2px solid #333;margin:18px 0 6px;font-size:17px;break-after:avoid}
 .c{padding:5px 0;border-bottom:1px solid #ddd;break-inside:avoid}.c b{font-size:15px}.ap{color:#a60;font-size:11px}#f{width:40%;font-size:15px;padding:4px}select{font-size:15px;padding:3px}
 @media (max-width:768px){body{margin:12px auto;font-size:15px}#f,select{width:100%;font-size:16px;min-height:44px;box-sizing:border-box;margin:6px 0}.np button{min-height:44px;padding:0 16px}.c{padding:10px 0;overflow-wrap:anywhere}.c a{display:inline-block;padding:4px 0}h1{font-size:19px!important}}
 @media print{.np{display:none}body{font-size:11px;margin:0}a{color:#000;text-decoration:none}}</style></head><body>
 <div class="np"><a href="index.html">← Map</a> · <select id="st" aria-label="State"></select> <select id="co" aria-label="County"><option value="">All counties</option></select> <select id="ci" aria-label="City"><option value="">All cities</option></select> <input id="f" placeholder="Filter by name, pastor, address…"> <button onclick="print()">Print</button> <span id="n"></span></div>
-<h1 style="font-size:20px">Church of God Directory — Florida and Georgia</h1><div id="out"></div>
+<h1 style="font-size:20px">Church of God Directory — Florida and the Southeast</h1><div id="out"></div>
 <script src="churches.js"></script><script>
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),grp=c=>c.city_group||c.city||'(No city listed)';
-const STATE_NAME={FL:'Florida',GA:'Georgia'};
+const STATE_NAME={FL:'Florida',GA:'Georgia',AL:'Alabama',SC:'South Carolina',NC:'North Carolina',TN:'Tennessee',MS:'Mississippi'};
 const states=[...new Set(CHURCHES.map(c=>c.state))].filter(Boolean).sort();
 $('st').innerHTML='<option value="">All states</option>'+states.map(code=>`<option value="${esc(code)}">${esc(STATE_NAME[code]||code)}</option>`).join('');
 function scoped(){const st=$('st').value;return CHURCHES.filter(c=>!st||c.state===st)}

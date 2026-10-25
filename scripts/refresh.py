@@ -165,7 +165,8 @@ _BREAK_RE = re.compile(r"(?is)<br\s*/?>")
 _PARAGRAPH_RE = re.compile(r"(?is)<p\b[^>]*>(.*?)</p>")
 _BOLD_RE = re.compile(r"(?is)<b\b[^>]*>(.*?)</b>")
 _TAG_RE = re.compile(r"(?is)<[^>]+>")
-_CITY_RE = re.compile(r"^(.*?),\s*([A-Za-z]{2}),\s*(\d{5})(?:-?\d{4})?$")
+# ZIP+4 on the locator is sometimes shorter than four digits (38025-152).
+_CITY_RE = re.compile(r"^(.*?),\s*([A-Za-z]{2}),\s*(\d{5})(?:-?\d{1,4})?$")
 _RESULTS_RE = re.compile(
     r"Results\s+([\d,]+)\s+to\s+([\d,]+)\s+of\s+([\d,]+)",
     re.IGNORECASE,
