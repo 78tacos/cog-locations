@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, the Upper South, and the Midwest
+JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -234,6 +234,10 @@ class DirectoryRuleTests(unittest.TestCase):
             "MN": set(refresh.COUNTY_FIPS_BY_STATE["27"].values()),
             "IA": set(refresh.COUNTY_FIPS_BY_STATE["19"].values()),
             "MO": set(refresh.COUNTY_FIPS_BY_STATE["29"].values()),
+            "PA": set(refresh.COUNTY_FIPS_BY_STATE["42"].values()),
+            "MD": set(refresh.COUNTY_FIPS_BY_STATE["24"].values()),
+            "DE": set(refresh.COUNTY_FIPS_BY_STATE["10"].values()),
+            "NJ": set(refresh.COUNTY_FIPS_BY_STATE["34"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -455,12 +459,12 @@ class FormatTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), and the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri).",
+            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), and the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey).",
             text,
         )
-        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO` rebuilds it.", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ` rebuilds it.", text)
         self.assertIn(
-            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO\n```",
+            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ\n```",
             text,
         )
         self.assertNotIn("```bash\npython3 scripts/refresh.py\n```", text)
