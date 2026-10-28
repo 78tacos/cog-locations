@@ -416,19 +416,40 @@ def street_candidates(church: dict) -> list[str]:
     return found
 
 
-# Digits at the start of the line, with an optional letter suffix (123, 123A).
-# "1st" and "21st" do not match: the letters after the digits are still one word.
-_HOUSE_NUMBER_RE = re.compile(r"\s*\d+[A-Za-z]?\b")
+# Leading digits, then the letters glued to them (if any), then the rest.
+# "21st" keeps the "21" together so the suffix can be rejected as an ordinal.
+_HOUSE_NUMBER_RE = re.compile(r"\s*(\d+)([A-Za-z]*)(.*)", re.IGNORECASE)
+_ORDINAL_SUFFIXES = frozenset({"st", "nd", "rd", "th"})
+_BARE_INTERSECTION_RE = re.compile(r"\s*(?:and\b|&)", re.IGNORECASE)
+
+
+def _line_has_house_number(text: str) -> bool:
+    """True when one street line starts with a real house number.
+
+    Accepts ``123 Main``, ``123A Main``, and a number glued to the street
+    word (``1501Trent Boulevard``). Rejects ordinals (``1st``, ``21st``,
+    ``4th``) and a bare intersection (``80 and Elm``, ``4 & Pine``).
+    """
+    match = _HOUSE_NUMBER_RE.match(text or "")
+    if not match:
+        return False
+    letters, tail = match.group(2), match.group(3)
+    if letters.lower() in _ORDINAL_SUFFIXES:
+        return False
+    if not letters and _BARE_INTERSECTION_RE.match(tail):
+        return False
+    return True
 
 
 def has_house_number(church: dict) -> bool:
     """True when a street line starts with a house number, such as ``123 Main``.
 
     Numeric street names are not house numbers. ``1st Street``, ``4th and Pine``,
-    and ``US 62`` stay on the ZIP-center path. ``street_candidates`` is unchanged
-    and still supplies geocoder query strings.
+    ``80 and Elm``, and ``US 62`` stay on the ZIP-center path. A number glued
+    to the street word (``1501Trent``) still counts. ``street_candidates`` is
+    unchanged and still supplies geocoder query strings.
     """
-    return any(_HOUSE_NUMBER_RE.match(candidate) for candidate in street_candidates(church))
+    return any(_line_has_house_number(candidate) for candidate in street_candidates(church))
 
 
 def clean_city(city: str) -> str:

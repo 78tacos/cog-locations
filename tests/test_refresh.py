@@ -501,6 +501,13 @@ class FallbackGeocodeTests(unittest.TestCase):
         self.assertFalse(refresh.has_house_number(_church(address1="21st Avenue")))
         self.assertFalse(refresh.has_house_number(_church(address1="US 62")))
         self.assertFalse(refresh.has_house_number(_church(address1="4th and Pine Street")))
+        self.assertFalse(refresh.has_house_number(_church(address1="10th Street")))
+        self.assertFalse(refresh.has_house_number(_church(address1="22nd Street")))
+        self.assertFalse(refresh.has_house_number(_church(address1="80 and Elm Street")))
+        self.assertFalse(refresh.has_house_number(_church(address1="4 and Pine")))
+        self.assertFalse(refresh.has_house_number(_church(address1="4 & Pine")))
+        self.assertFalse(refresh.has_house_number(_church(address1="80 & Elm Street")))
+        self.assertTrue(refresh.has_house_number(_church(address1="1501Trent Boulevard")))
         self.assertFalse(refresh.has_house_number(_church(address1="County Road 49 and Highway 278")))
         self.assertFalse(refresh.has_house_number(_church(address1="PO Box 476")))
         self.assertFalse(refresh.has_house_number(_church(address1="Grace Chapel")))
@@ -513,6 +520,8 @@ class FallbackGeocodeTests(unittest.TestCase):
             _church(address1="1st Street", city="Sweetwater", state="TX", zip="79556"),
             _church(address1="US 62", city="Princeton", state="KY", zip="42445"),
             _church(address1="4th and Pine Street", city="Sweetwater", state="TX", zip="79556"),
+            _church(address1="80 and Elm Street", city="LaBelle", state="FL", zip="33975"),
+            _church(address1="4 & Pine", city="Sweetwater", state="TX", zip="79556"),
         ]
         for church in cases:
             old = refresh.make_record(church, 32.4708, -100.4057, False, "Nolan")
@@ -525,6 +534,15 @@ class FallbackGeocodeTests(unittest.TestCase):
             [kept] = refresh.resolve_locations([church], [old], hits, {})
             self.assertFalse(kept["approx"], church["address1"])
             self.assertEqual(kept["lat"], 32.4708)
+
+    def test_glued_house_number_keeps_the_street_hit(self):
+        church = _church(address1="1501Trent Boulevard", city="Lexington", state="KY", zip="40515")
+        old = refresh.make_record(church, 37.91, -84.41, True, "Fayette")
+        hits = {refresh.address_key(church): (37.99, -84.45, "Fayette", False)}
+        centroids = {"40515": (37.91, -84.41)}
+        [record] = refresh.resolve_locations([church], [old], hits, centroids)
+        self.assertFalse(record["approx"])
+        self.assertEqual((record["lat"], record["lng"], record["county"]), (37.99, -84.45, "Fayette"))
 
     def test_city_spelling_fixed(self):
         self.assertEqual(refresh.clean_city("Brandenton"), "Bradenton")

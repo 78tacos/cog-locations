@@ -53,7 +53,7 @@ function draw(){
  $('out').innerHTML=keys.map(k=>{
   const rows=g.get(k).slice().sort((a,b)=>a.name.localeCompare(b.name)),first=rows[0];
   const title=multi?grp(first)+', '+first.state:grp(first);
-  const kind=/ city$/i.test(first.county||'')?'':(first.state==='LA'?'Parish':'County');
+  const kind=/ city$/.test(first.county||'')?'':(first.state==='LA'?'Parish':'County');
   const county=first.county?(multi?first.county+(kind?' '+kind:'')+', '+first.state:first.county+(kind?' '+kind:'')):'';
   return `<h2>${esc(title)} <small style="font-weight:normal;color:#666">${county?esc(county)+' · ':''}${rows.length}</small></h2>`+rows.map(c=>`<div class=c><b>${esc(c.name)}</b>${c.pastor?' — Pastor '+esc(c.pastor):''}<br>${esc([c.address1,c.address2].filter(Boolean).join(', '))}${c.city?', '+esc(c.city):''}, ${c.state} ${c.zip}${c.approx?' <span class=ap>(map location approx.)</span>':''}${typeof c.lat!=='number'?' <span class=ap>(not on map)</span>':''}<br>${[c.phone&&esc(c.phone),c.website&&`<a href="${esc(/^https?:/.test(c.website)?c.website:'http://'+c.website)}">${esc(c.website)}</a>`,c.email&&`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`].filter(Boolean).join(' · ')}</div>`).join('');
  }).join('');
