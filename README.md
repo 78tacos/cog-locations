@@ -1,4 +1,4 @@
-# Church of God Map — Florida, the Southeast, and South-Central
+# Church of God Map — Florida, the Southeast, South-Central, and the Upper South
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -23,10 +23,10 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 5. It keeps every Florida church and records its county. A church that can't be placed is still listed in the directory without a pin.
 
 ```bash
-python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX
+python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY
 ```
 
-The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX`). The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), and the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas). `python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` so the next refresh keeps every published state.
+The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY`). The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), and the Upper South states (Virginia, West Virginia, and Kentucky). `python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY` so the next refresh keeps every published state.
 
 The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/cog-locations/.
 

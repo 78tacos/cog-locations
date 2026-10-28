@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import refresh
 
-PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX")
+PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY")
 STATE_FIPS = {
     "FL": "12",
     "GA": "13",
@@ -22,6 +22,9 @@ STATE_FIPS = {
     "AR": "05",
     "OK": "40",
     "TX": "48",
+    "VA": "51",
+    "WV": "54",
+    "KY": "21",
 }
 STATE_LABEL = {
     "FL": "Florida",
@@ -35,6 +38,9 @@ STATE_LABEL = {
     "AR": "Arkansas",
     "OK": "Oklahoma",
     "TX": "Texas",
+    "VA": "Virginia",
+    "WV": "West Virginia",
+    "KY": "Kentucky",
 }
 # south, north, west, east — padded past the state line so ZIP-center pins still fit.
 BOXES = {
@@ -49,6 +55,9 @@ BOXES = {
     "AR": (32.6, 36.9, -95.0, -89.2),
     "OK": (33.2, 37.4, -103.4, -94.0),
     "TX": (25.4, 37.0, -107.2, -93.0),
+    "VA": (36.2, 39.8, -84.1, -74.9),
+    "WV": (36.9, 40.9, -83.0, -77.4),
+    "KY": (36.2, 39.4, -89.9, -81.6),
 }
 
 
@@ -60,20 +69,22 @@ class SoutheastPageTests(unittest.TestCase):
     def test_map_covers_florida_and_the_southeast(self):
         index = (ROOT / "index.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Map — Florida, the Southeast, and South-Central</title>",
+            "<title>Church of God Map — Florida, the Southeast, South-Central, and the Upper South</title>",
             index,
         )
         self.assertIn(">Church of God Map</h3>", index)
         self.assertIn(
-            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, and Texas",
+            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, and Kentucky",
             index,
         )
         self.assertIn('id="st"', index)
         self.assertIn("All states", index)
         self.assertIn("BOUNDS.ALL", index)
         self.assertIn("-106.65", index)
-        self.assertIn("-75.4", index)
-        self.assertIn("37.0", index)
+        self.assertIn("ALL:[[24.4,-106.65],[40.8,-75.1]]", index)
+        self.assertIn("VA:[[36.4,-83.9],[39.6,-75.1]]", index)
+        self.assertIn("WV:[[37.0,-82.8],[40.8,-77.5]]", index)
+        self.assertIn("KY:[[36.4,-89.8],[39.3,-81.8]]", index)
         self.assertNotIn("const FL=", index)
         self.assertNotIn("viewbox=-87.7,31.1,-79.8,24.4", index)
         self.assertNotIn("Florida and Georgia</title>", index)
@@ -87,14 +98,18 @@ class SoutheastPageTests(unittest.TestCase):
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Directory — Florida, the Southeast, and South-Central</title>",
+            "<title>Church of God Directory — Florida, the Southeast, South-Central, and the Upper South</title>",
             directory,
         )
-        self.assertIn("Church of God Directory — Florida, the Southeast, and South-Central", directory)
+        self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, and the Upper South", directory)
         self.assertIn("first.state==='LA'?'Parish':'County'", directory)
+        self.assertIn("/ city$/i.test(first.county||'')", directory)
+        self.assertIn("All parishes", directory)
+        self.assertIn("All counties", directory)
+        self.assertIn("All regions", directory)
         self.assertIn('id="st"', directory)
         self.assertIn('aria-label="State"', directory)
-        self.assertIn('aria-label="County"', directory)
+        self.assertIn('aria-label="Region"', directory)
         self.assertIn('aria-label="City"', directory)
         self.assertIn("countyValue", directory)
         self.assertIn("c.state+'|'+c.county", directory)
@@ -109,12 +124,14 @@ class SoutheastPageTests(unittest.TestCase):
 
     def test_monthly_job_refreshes_every_published_state(self):
         workflow = (ROOT / ".github/workflows/refresh.yml").read_text(encoding="utf-8")
-        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX", workflow)
+        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY", workflow)
+        self.assertIn("timeout-minutes: 90", workflow)
         self.assertNotIn("python scripts/refresh.py FL\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS\n", workflow)
+        self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX\n", workflow)
         self.assertIn(
-            "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, and Texas church directory",
+            "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, and Kentucky church directory",
             workflow,
         )
 
@@ -137,10 +154,12 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["AR"], 70)
         self.assertGreaterEqual(self.counts["OK"], 50)
         self.assertGreaterEqual(self.counts["TX"], 240)
+        # Upper South floors sit under the locator binding recorded in the PR.
+        # They stay above the per-state download floor of 25.
+        for code in ("VA", "WV", "KY"):
+            self.assertGreaterEqual(self.counts[code], 25, code)
         self.assertGreaterEqual(len(self.churches), 3100)
         refresh.require_complete_download(list(PUBLISHED), self.churches)
-        for code in ("VA", "WV", "KY"):
-            self.assertNotIn(code, self.counts)
 
     def test_records_keep_the_schema_and_own_state_counties(self):
         allowed = {
@@ -185,6 +204,33 @@ class SoutheastDataTests(unittest.TestCase):
             self.assertIn("Polk", names[church["state"]])
         self.assertGreater(seen["FL"], 0)
         self.assertGreater(seen["GA"], 0)
+
+    def test_jefferson_and_shared_cities_stay_on_their_own_state(self):
+        names = {
+            code: set(refresh.COUNTY_FIPS_BY_STATE[STATE_FIPS[code]].values()) for code in PUBLISHED
+        }
+        seen = Counter()
+        for church in self.churches:
+            if church["county"] != "Jefferson":
+                continue
+            seen[church["state"]] += 1
+            self.assertIn("Jefferson", names[church["state"]])
+        self.assertGreater(seen["KY"], 0)
+        self.assertGreater(len(seen), 1)
+        cities: dict[str, set[str]] = {}
+        for church in self.churches:
+            cities.setdefault(church["city_group"], set()).add(church["state"])
+        self.assertGreaterEqual(len(cities["Cleveland"]), 2)
+        self.assertTrue(cities["Cleveland"] & {"AL", "GA", "MS", "SC", "TN"})
+
+    def test_numberless_pins_stay_approximate(self):
+        checked = 0
+        for church in self.churches:
+            if refresh.has_house_number(church) or not refresh.has_pin(church):
+                continue
+            checked += 1
+            self.assertTrue(church["approx"], church["name"] + " " + church["address1"])
+        self.assertGreater(checked, 0)
 
 
 if __name__ == "__main__":

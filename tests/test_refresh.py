@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Church of God Map — Florida, the Southeast, and South-Central
+JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, and the Upper South
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -306,7 +306,13 @@ class DirectoryRuleTests(unittest.TestCase):
         self.assertEqual(refresh.county_from_fips("05", "119"), "Pulaski")
         self.assertEqual(refresh.county_from_fips("40", "109"), "Oklahoma")
         self.assertEqual(refresh.county_from_fips("48", "201"), "Harris")
+        self.assertEqual(refresh.county_from_fips("51", "013"), "Arlington")
+        self.assertEqual(refresh.county_from_fips("51", "760"), "Richmond city")
+        self.assertEqual(refresh.county_from_fips("54", "039"), "Kanawha")
+        self.assertEqual(refresh.county_from_fips("21", "067"), "Fayette")
+        self.assertEqual(refresh.county_from_fips("21", "111"), "Jefferson")
         self.assertNotIn("Parish", refresh.county_from_fips("22", "071"))
+        self.assertNotIn("County", refresh.county_from_fips("51", "760"))
         self.assertEqual(refresh.FL_COUNTY_FIPS, FLORIDA_COUNTY_FIPS)
 
     def test_parse_national_county_snippet(self):
@@ -438,12 +444,12 @@ class FormatTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), and the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas).",
+            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), and the Upper South states (Virginia, West Virginia, and Kentucky).",
             text,
         )
-        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX` rebuilds it.", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY` rebuilds it.", text)
         self.assertIn(
-            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX\n```",
+            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY\n```",
             text,
         )
         self.assertNotIn("```bash\npython3 scripts/refresh.py\n```", text)
@@ -482,6 +488,40 @@ class FallbackGeocodeTests(unittest.TestCase):
             ["12 Oak Street"],
         )
         self.assertEqual(refresh.street_candidates(_church(address1="Grace Chapel")), [])
+
+    def test_has_house_number_requires_a_leading_number(self):
+        self.assertTrue(refresh.has_house_number(_church(address1="10356 103rd Street")))
+        self.assertTrue(refresh.has_house_number(_church(address1="2523 US Hwy 27 S Suite 202")))
+        self.assertTrue(refresh.has_house_number(_church(address1="211 NW 5th Avenue")))
+        self.assertTrue(refresh.has_house_number(_church(address1="123A Main Street")))
+        self.assertFalse(refresh.has_house_number(_church(address1="1st Street")))
+        self.assertFalse(refresh.has_house_number(_church(address1="21st Avenue")))
+        self.assertFalse(refresh.has_house_number(_church(address1="US 62")))
+        self.assertFalse(refresh.has_house_number(_church(address1="4th and Pine Street")))
+        self.assertFalse(refresh.has_house_number(_church(address1="County Road 49 and Highway 278")))
+        self.assertFalse(refresh.has_house_number(_church(address1="PO Box 476")))
+        self.assertFalse(refresh.has_house_number(_church(address1="Grace Chapel")))
+        # Geocoder queries still include the ordinal and route lines.
+        self.assertEqual(refresh.street_candidates(_church(address1="1st Street")), ["1st Street"])
+        self.assertEqual(refresh.street_candidates(_church(address1="US 62")), ["US 62"])
+
+    def test_ordinal_and_route_use_the_zip_center_not_a_streetint_hit(self):
+        cases = [
+            _church(address1="1st Street", city="Sweetwater", state="TX", zip="79556"),
+            _church(address1="US 62", city="Princeton", state="KY", zip="42445"),
+            _church(address1="4th and Pine Street", city="Sweetwater", state="TX", zip="79556"),
+        ]
+        for church in cases:
+            old = refresh.make_record(church, 32.4708, -100.4057, False, "Nolan")
+            hits = {refresh.address_key(church): (32.4708, -100.4057, "Nolan", False)}
+            centroids = {church["zip"]: (32.4600, -100.3900)}
+            [record] = refresh.resolve_locations([church], [old], hits, centroids)
+            self.assertTrue(record["approx"], church["address1"])
+            self.assertEqual((record["lat"], record["lng"]), (32.4600, -100.3900), church["address1"])
+            self.assertEqual(record["county"], "")
+            [kept] = refresh.resolve_locations([church], [old], hits, {})
+            self.assertFalse(kept["approx"], church["address1"])
+            self.assertEqual(kept["lat"], 32.4708)
 
     def test_city_spelling_fixed(self):
         self.assertEqual(refresh.clean_city("Brandenton"), "Bradenton")
@@ -577,6 +617,25 @@ class StatewideTests(unittest.TestCase):
         )
         self.assertEqual(calls, [{"13"}])
         self.assertEqual(pinned["county"], "Fulton")
+
+    def test_missing_upper_south_county_uses_that_states_fips(self):
+        cases = [
+            ("VA", "Richmond", "23219", 37.54, -77.43, "51", "Richmond city"),
+            ("WV", "Charleston", "25301", 38.35, -81.63, "54", "Kanawha"),
+            ("KY", "Lexington", "40507", 38.04, -84.50, "21", "Fayette"),
+        ]
+        for state, city, zip_code, lat, lng, fips, county in cases:
+            pinned = refresh.make_record(
+                _church(state=state, city=city, zip=zip_code), lat, lng, False, ""
+            )
+            calls = []
+            refresh.fill_missing_counties(
+                [pinned],
+                lookup=lambda lat, lng, allowed=None, calls=calls: calls.append(set(allowed)) or county,
+                sleep=lambda _: None,
+            )
+            self.assertEqual(calls, [{fips}], state)
+            self.assertEqual(pinned["county"], county, state)
 
     def test_missing_louisiana_county_uses_louisiana_fips(self):
         pinned = refresh.make_record(
