@@ -154,11 +154,12 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["AR"], 70)
         self.assertGreaterEqual(self.counts["OK"], 50)
         self.assertGreaterEqual(self.counts["TX"], 240)
-        # Upper South floors sit under the locator binding recorded in the PR.
-        # They stay above the per-state download floor of 25.
-        for code in ("VA", "WV", "KY"):
-            self.assertGreaterEqual(self.counts[code], 25, code)
-        self.assertGreaterEqual(len(self.churches), 3100)
+        # Locator binding for this batch is VA 191, WV 154, KY 213.
+        # Floors sit a little under that so a few-record drift still passes.
+        self.assertGreaterEqual(self.counts["VA"], 180)
+        self.assertGreaterEqual(self.counts["WV"], 140)
+        self.assertGreaterEqual(self.counts["KY"], 200)
+        self.assertGreaterEqual(len(self.churches), 3600)
         refresh.require_complete_download(list(PUBLISHED), self.churches)
 
     def test_records_keep_the_schema_and_own_state_counties(self):

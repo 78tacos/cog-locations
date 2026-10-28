@@ -223,6 +223,9 @@ class DirectoryRuleTests(unittest.TestCase):
             "AR": set(refresh.COUNTY_FIPS_BY_STATE["05"].values()),
             "OK": set(refresh.COUNTY_FIPS_BY_STATE["40"].values()),
             "TX": set(refresh.COUNTY_FIPS_BY_STATE["48"].values()),
+            "VA": set(refresh.COUNTY_FIPS_BY_STATE["51"].values()),
+            "WV": set(refresh.COUNTY_FIPS_BY_STATE["54"].values()),
+            "KY": set(refresh.COUNTY_FIPS_BY_STATE["21"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
