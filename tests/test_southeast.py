@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import refresh
 
-PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY")
+PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY", "OH", "IN", "IL", "MI")
 STATE_FIPS = {
     "FL": "12",
     "GA": "13",
@@ -25,6 +25,10 @@ STATE_FIPS = {
     "VA": "51",
     "WV": "54",
     "KY": "21",
+    "OH": "39",
+    "IN": "18",
+    "IL": "17",
+    "MI": "26",
 }
 STATE_LABEL = {
     "FL": "Florida",
@@ -41,6 +45,10 @@ STATE_LABEL = {
     "VA": "Virginia",
     "WV": "West Virginia",
     "KY": "Kentucky",
+    "OH": "Ohio",
+    "IN": "Indiana",
+    "IL": "Illinois",
+    "MI": "Michigan",
 }
 # south, north, west, east — padded past the state line so ZIP-center pins still fit.
 BOXES = {
@@ -58,6 +66,10 @@ BOXES = {
     "VA": (36.2, 39.8, -84.1, -74.9),
     "WV": (36.9, 40.9, -83.0, -77.4),
     "KY": (36.2, 39.4, -89.9, -81.6),
+    "OH": (38.2, 42.2, -85.1, -80.3),
+    "IN": (37.5, 42.0, -88.4, -84.6),
+    "IL": (36.8, 42.7, -91.8, -86.8),
+    "MI": (41.5, 48.5, -90.7, -82.2),
 }
 
 
@@ -69,22 +81,26 @@ class SoutheastPageTests(unittest.TestCase):
     def test_map_covers_florida_and_the_southeast(self):
         index = (ROOT / "index.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Map — Florida, the Southeast, South-Central, and the Upper South</title>",
+            "<title>Church of God Map — Florida, the Southeast, South-Central, the Upper South, and the Midwest</title>",
             index,
         )
         self.assertIn(">Church of God Map</h3>", index)
         self.assertIn(
-            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, and Kentucky",
+            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, and Michigan",
             index,
         )
         self.assertIn('id="st"', index)
         self.assertIn("All states", index)
         self.assertIn("BOUNDS.ALL", index)
         self.assertIn("-106.65", index)
-        self.assertIn("ALL:[[24.4,-106.65],[40.8,-75.1]]", index)
+        self.assertIn("ALL:[[24.4,-106.65],[48.4,-75.1]]", index)
         self.assertIn("VA:[[36.4,-83.9],[39.6,-75.1]]", index)
         self.assertIn("WV:[[37.0,-82.8],[40.8,-77.5]]", index)
         self.assertIn("KY:[[36.4,-89.8],[39.3,-81.8]]", index)
+        self.assertIn("OH:[[38.3,-84.9],[42.1,-80.4]]", index)
+        self.assertIn("IN:[[37.7,-88.2],[41.9,-84.7]]", index)
+        self.assertIn("IL:[[36.9,-91.6],[42.6,-86.9]]", index)
+        self.assertIn("MI:[[41.6,-90.5],[48.4,-82.3]]", index)
         self.assertNotIn("const FL=", index)
         self.assertNotIn("viewbox=-87.7,31.1,-79.8,24.4", index)
         self.assertNotIn("Florida and Georgia</title>", index)
@@ -98,10 +114,10 @@ class SoutheastPageTests(unittest.TestCase):
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Directory — Florida, the Southeast, South-Central, and the Upper South</title>",
+            "<title>Church of God Directory — Florida, the Southeast, South-Central, the Upper South, and the Midwest</title>",
             directory,
         )
-        self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, and the Upper South", directory)
+        self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, the Upper South, and the Midwest", directory)
         self.assertIn("first.state==='LA'?'Parish':'County'", directory)
         self.assertIn("/ city$/.test(first.county||'')", directory)
         self.assertNotIn("/ city$/i", directory)
@@ -125,14 +141,14 @@ class SoutheastPageTests(unittest.TestCase):
 
     def test_monthly_job_refreshes_every_published_state(self):
         workflow = (ROOT / ".github/workflows/refresh.yml").read_text(encoding="utf-8")
-        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY", workflow)
+        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI", workflow)
         self.assertIn("timeout-minutes: 90", workflow)
         self.assertNotIn("python scripts/refresh.py FL\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX\n", workflow)
         self.assertIn(
-            "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, and Kentucky church directory",
+            "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, and Michigan church directory",
             workflow,
         )
 
@@ -160,7 +176,13 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["VA"], 180)
         self.assertGreaterEqual(self.counts["WV"], 140)
         self.assertGreaterEqual(self.counts["KY"], 200)
-        self.assertGreaterEqual(len(self.churches), 3600)
+        # Locator binding for this batch is OH 173, IN 105, IL 120, MI 94.
+        # Floors sit a little under that so a few-record drift still passes.
+        self.assertGreaterEqual(self.counts["OH"], 160)
+        self.assertGreaterEqual(self.counts["IN"], 95)
+        self.assertGreaterEqual(self.counts["IL"], 110)
+        self.assertGreaterEqual(self.counts["MI"], 85)
+        self.assertGreaterEqual(len(self.churches), 4100)
         refresh.require_complete_download(list(PUBLISHED), self.churches)
 
     def test_records_keep_the_schema_and_own_state_counties(self):
