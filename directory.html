@@ -8,7 +8,7 @@
 <script src="churches.js"></script><script>
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),grp=c=>c.city_group||c.city||'(No city listed)';
-const STATE_NAME={FL:'Florida',GA:'Georgia',AL:'Alabama',SC:'South Carolina',NC:'North Carolina',TN:'Tennessee',MS:'Mississippi',LA:'Louisiana',AR:'Arkansas',OK:'Oklahoma',TX:'Texas',VA:'Virginia',WV:'West Virginia',KY:'Kentucky',OH:'Ohio',IN:'Indiana',IL:'Illinois',MI:'Michigan'};
+const STATE_NAME={FL:'Florida',GA:'Georgia',AL:'Alabama',SC:'South Carolina',NC:'North Carolina',TN:'Tennessee',MS:'Mississippi',LA:'Louisiana',AR:'Arkansas',OK:'Oklahoma',TX:'Texas',VA:'Virginia',WV:'West Virginia',KY:'Kentucky',OH:'Ohio',IN:'Indiana',IL:'Illinois',MI:'Michigan',WI:'Wisconsin',MN:'Minnesota',IA:'Iowa',MO:'Missouri'};
 const states=[...new Set(CHURCHES.map(c=>c.state))].filter(Boolean).sort();
 $('st').innerHTML='<option value="">All states</option>'+states.map(code=>`<option value="${esc(code)}">${esc(STATE_NAME[code]||code)}</option>`).join('');
 function scoped(){const st=$('st').value;return CHURCHES.filter(c=>!st||c.state===st)}

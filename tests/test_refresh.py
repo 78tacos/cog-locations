@@ -230,6 +230,10 @@ class DirectoryRuleTests(unittest.TestCase):
             "IN": set(refresh.COUNTY_FIPS_BY_STATE["18"].values()),
             "IL": set(refresh.COUNTY_FIPS_BY_STATE["17"].values()),
             "MI": set(refresh.COUNTY_FIPS_BY_STATE["26"].values()),
+            "WI": set(refresh.COUNTY_FIPS_BY_STATE["55"].values()),
+            "MN": set(refresh.COUNTY_FIPS_BY_STATE["27"].values()),
+            "IA": set(refresh.COUNTY_FIPS_BY_STATE["19"].values()),
+            "MO": set(refresh.COUNTY_FIPS_BY_STATE["29"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -451,12 +455,12 @@ class FormatTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), and the Midwest states (Ohio, Indiana, Illinois, and Michigan).",
+            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), and the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri).",
             text,
         )
-        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI` rebuilds it.", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO` rebuilds it.", text)
         self.assertIn(
-            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI\n```",
+            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO\n```",
             text,
         )
         self.assertNotIn("```bash\npython3 scripts/refresh.py\n```", text)

@@ -52,10 +52,10 @@ GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
-# Below the smallest published state (Louisiana, 56) and above a one-page
-# locator response (about 10). An empty or near-empty state must fail even
-# when the other states already clear the combined floor of 100.
-MIN_PER_STATE = 25
+# Above a one-page locator response (about 10). Iowa is the smallest
+# published state (15 on the locator). An empty or one-page state must fail
+# even when the other states already clear the combined floor of 100.
+MIN_PER_STATE = 15
 DEFAULT_STATES = ("FL",)
 NATIONAL_COUNTY_PATH = Path(__file__).with_name("national_county.txt")
 
