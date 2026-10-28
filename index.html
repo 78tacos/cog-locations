@@ -1,4 +1,4 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>Church of God Map — Florida, the Southeast, South-Central, and the Upper South</title>
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Church of God Map — Florida, the Southeast, South-Central, the Upper South, and the Midwest</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
@@ -11,7 +11,7 @@ input,select,button{font-size:16px!important;min-height:44px;box-sizing:border-b
 .r{padding:10px 0;font-size:14px}.r a{display:inline-block;padding:6px 2px}.leaflet-touch .leaflet-bar a{width:40px;height:40px;line-height:40px}}
 input,select,button{font-size:14px;margin:2px 0}.r{border-bottom:1px solid #eee;padding:6px 0;font-size:13px;cursor:pointer}.r b{font-size:14px}.mi{float:right;color:#06c;font-weight:bold}.ap{color:#a60;font-size:11px}#status{font-size:12px;color:#555;margin:4px 0}.sub{font-size:12px;color:#555;margin:0 0 6px}</style></head><body>
 <div id="side"><h3 style="margin:4px 0">Church of God Map</h3>
-<div class="sub">Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, and Kentucky</div>
+<div class="sub">Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, and Michigan</div>
 <input id="addr" placeholder="Address, city or zip" style="width:100%"><br>
 Radius: <select id="rad"><option>5</option><option selected>10</option><option>15</option><option>25</option><option>50</option><option>75</option><option>100</option><option value="custom">custom…</option></select>
 <input id="radc" type="number" min="0.5" step="0.5" placeholder="miles" style="width:70px;display:none">
@@ -23,8 +23,8 @@ State <select id="st" aria-label="State"></select>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="churches.js"></script>
 <script>
-const STATE_NAME={FL:'Florida',GA:'Georgia',AL:'Alabama',SC:'South Carolina',NC:'North Carolina',TN:'Tennessee',MS:'Mississippi',LA:'Louisiana',AR:'Arkansas',OK:'Oklahoma',TX:'Texas',VA:'Virginia',WV:'West Virginia',KY:'Kentucky'};
-const BOUNDS={FL:[[24.4,-87.7],[31.1,-79.8]],GA:[[30.25,-85.75],[35.15,-80.7]],AL:[[30.1,-88.6],[35.1,-84.8]],SC:[[32.0,-83.5],[35.3,-78.5]],NC:[[33.7,-84.4],[36.7,-75.4]],TN:[[34.9,-90.4],[36.7,-81.6]],MS:[[30.1,-91.8],[35.1,-88.0]],LA:[[28.9,-94.05],[33.02,-88.8]],AR:[[33.0,-94.62],[36.5,-89.64]],OK:[[33.62,-103.0],[37.0,-94.43]],TX:[[25.84,-106.65],[36.5,-93.51]],VA:[[36.4,-83.9],[39.6,-75.1]],WV:[[37.0,-82.8],[40.8,-77.5]],KY:[[36.4,-89.8],[39.3,-81.8]],ALL:[[24.4,-106.65],[40.8,-75.1]]};
+const STATE_NAME={FL:'Florida',GA:'Georgia',AL:'Alabama',SC:'South Carolina',NC:'North Carolina',TN:'Tennessee',MS:'Mississippi',LA:'Louisiana',AR:'Arkansas',OK:'Oklahoma',TX:'Texas',VA:'Virginia',WV:'West Virginia',KY:'Kentucky',OH:'Ohio',IN:'Indiana',IL:'Illinois',MI:'Michigan'};
+const BOUNDS={FL:[[24.4,-87.7],[31.1,-79.8]],GA:[[30.25,-85.75],[35.15,-80.7]],AL:[[30.1,-88.6],[35.1,-84.8]],SC:[[32.0,-83.5],[35.3,-78.5]],NC:[[33.7,-84.4],[36.7,-75.4]],TN:[[34.9,-90.4],[36.7,-81.6]],MS:[[30.1,-91.8],[35.1,-88.0]],LA:[[28.9,-94.05],[33.02,-88.8]],AR:[[33.0,-94.62],[36.5,-89.64]],OK:[[33.62,-103.0],[37.0,-94.43]],TX:[[25.84,-106.65],[36.5,-93.51]],VA:[[36.4,-83.9],[39.6,-75.1]],WV:[[37.0,-82.8],[40.8,-77.5]],KY:[[36.4,-89.8],[39.3,-81.8]],OH:[[38.3,-84.9],[42.1,-80.4]],IN:[[37.7,-88.2],[41.9,-84.7]],IL:[[36.9,-91.6],[42.6,-86.9]],MI:[[41.6,-90.5],[48.4,-82.3]],ALL:[[24.4,-106.65],[48.4,-75.1]]};
 const map=L.map('map',{preferCanvas:true}).fitBounds(BOUNDS.ALL);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 const cl=L.markerClusterGroup({chunkedLoading:true,removeOutsideVisibleBounds:true,maxClusterRadius:60}).addTo(map);let center=null,circle=null,cm=null;

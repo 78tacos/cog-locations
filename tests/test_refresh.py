@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, and the Upper South
+JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, the Upper South, and the Midwest
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -226,6 +226,10 @@ class DirectoryRuleTests(unittest.TestCase):
             "VA": set(refresh.COUNTY_FIPS_BY_STATE["51"].values()),
             "WV": set(refresh.COUNTY_FIPS_BY_STATE["54"].values()),
             "KY": set(refresh.COUNTY_FIPS_BY_STATE["21"].values()),
+            "OH": set(refresh.COUNTY_FIPS_BY_STATE["39"].values()),
+            "IN": set(refresh.COUNTY_FIPS_BY_STATE["18"].values()),
+            "IL": set(refresh.COUNTY_FIPS_BY_STATE["17"].values()),
+            "MI": set(refresh.COUNTY_FIPS_BY_STATE["26"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -447,12 +451,12 @@ class FormatTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), and the Upper South states (Virginia, West Virginia, and Kentucky).",
+            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), and the Midwest states (Ohio, Indiana, Illinois, and Michigan).",
             text,
         )
-        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY` rebuilds it.", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI` rebuilds it.", text)
         self.assertIn(
-            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY\n```",
+            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI\n```",
             text,
         )
         self.assertNotIn("```bash\npython3 scripts/refresh.py\n```", text)
@@ -688,6 +692,21 @@ class StatewideTests(unittest.TestCase):
                 ("The Carpenters House", "Marbury", "AL", "36051", ""),
             ],
         )
+
+    def test_four_digit_zip_still_parses_city_and_state(self):
+        html = (
+            "<p><b>Masihi</b></p><p>Pastor: Peter John Alam</p>"
+            "<p>3201 Meadow Drive</p><p>Rolling Meadows, IL, 6007</p>"
+            "<p>Church Email: Peterjalam@gmail.com</p>"
+        )
+        churches = refresh.parse_churches(html)
+        self.assertEqual(len(churches), 1)
+        church = churches[0]
+        self.assertEqual(church["address1"], "3201 Meadow Drive")
+        self.assertEqual(church["address2"], "")
+        self.assertEqual(church["city"], "Rolling Meadows")
+        self.assertEqual(church["state"], "IL")
+        self.assertEqual(church["zip"], "6007")
 
     def test_record_without_zip_is_kept_when_it_has_contact_data(self):
         html = (
