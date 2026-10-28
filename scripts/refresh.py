@@ -13,7 +13,10 @@ address2 tried when address1 is a PO box or a name), then the single-address
 Census geocoder, then Nominatim (1 request/second), then the ArcGIS World
 Geocoder (findAddressCandidates, forStorage=false). A result is accepted only
 when it is a street-level match in the same ZIP or city. An address with no
-house number stays approximate at that ZIP's center.
+leading house number — a PO box, an ordinal street (1st Street), a route
+number (US 62), or an intersection — stays approximate at that ZIP's center
+when a centroid is available. Otherwise a saved pin is kept, or the record
+stays unpinned.
 """
 
 from __future__ import annotations
@@ -397,7 +400,11 @@ def _looks_like_street(text: str) -> bool:
 
 
 def street_candidates(church: dict) -> list[str]:
-    """Cleaned street lines worth geocoding, best first. Empty for PO-box-only."""
+    """Cleaned street lines worth geocoding, best first. Empty for PO-box-only.
+
+    A line with any digit is kept, including an ordinal street or a route
+    number. Callers that need a real house number use has_house_number.
+    """
     found: list[str] = []
     for raw in (church.get("address1", ""), church.get("address2", "")):
         for part in re.split(r"\s*,\s*", raw or ""):
@@ -407,6 +414,42 @@ def street_candidates(church: dict) -> list[str]:
                 if variant and variant not in found:
                     found.append(variant)
     return found
+
+
+# Leading digits, then the letters glued to them (if any), then the rest.
+# "21st" keeps the "21" together so the suffix can be rejected as an ordinal.
+_HOUSE_NUMBER_RE = re.compile(r"\s*(\d+)([A-Za-z]*)(.*)", re.IGNORECASE)
+_ORDINAL_SUFFIXES = frozenset({"st", "nd", "rd", "th"})
+_BARE_INTERSECTION_RE = re.compile(r"\s*(?:and\b|&)", re.IGNORECASE)
+
+
+def _line_has_house_number(text: str) -> bool:
+    """True when one street line starts with a real house number.
+
+    Accepts ``123 Main``, ``123A Main``, and a number glued to the street
+    word (``1501Trent Boulevard``). Rejects ordinals (``1st``, ``21st``,
+    ``4th``) and a bare intersection (``80 and Elm``, ``4 & Pine``).
+    """
+    match = _HOUSE_NUMBER_RE.match(text or "")
+    if not match:
+        return False
+    letters, tail = match.group(2), match.group(3)
+    if letters.lower() in _ORDINAL_SUFFIXES:
+        return False
+    if not letters and _BARE_INTERSECTION_RE.match(tail):
+        return False
+    return True
+
+
+def has_house_number(church: dict) -> bool:
+    """True when a street line starts with a house number, such as ``123 Main``.
+
+    Numeric street names are not house numbers. ``1st Street``, ``4th and Pine``,
+    ``80 and Elm``, and ``US 62`` stay on the ZIP-center path. A number glued
+    to the street word (``1501Trent``) still counts. ``street_candidates`` is
+    unchanged and still supplies geocoder query strings.
+    """
+    return any(_line_has_house_number(candidate) for candidate in street_candidates(church))
 
 
 def clean_city(city: str) -> str:
@@ -575,6 +618,14 @@ def resolve_locations(
     census_by_key: dict[tuple[str, str, str, str, str], tuple],
     centroids: dict[str, tuple[float, float]],
 ) -> list[dict]:
+    """Place each church on an exact pin, a ZIP center, or a saved pin.
+
+    A line with a leading house number uses a Census or fallback match from
+    this run, then a saved pin. A PO box, ordinal street, route number, or
+    intersection has no leading house number. That record is approximate at
+    the ZIP center when this run has a centroid. With no centroid, a saved
+    pin is kept. With neither, the church stays in the directory unpinned.
+    """
     cache: dict[tuple[str, str, str, str, str], dict] = {}
     for old in existing:
         if has_pin(old):
@@ -582,10 +633,11 @@ def resolve_locations(
     resolved: list[dict] = []
     for church in churches:
         key = address_key(church)
-        # No house number (PO box, street name, or "at"/corner description).
-        # A Census hit on that text is not a rooftop. Use the ZIP center when
-        # this run has one; otherwise keep the saved pin.
-        numbered = bool(street_candidates(church))
+        # No leading house number (PO box, "1st Street", "US 62", or an
+        # intersection). A Census or StreetInt hit on that text is not a
+        # rooftop. Use the ZIP center when this run has one; otherwise keep
+        # the saved pin.
+        numbered = has_house_number(church)
         old = cache.get(key)
         if old is not None and not numbered and church.get("zip") in centroids:
             old = None
@@ -1072,9 +1124,13 @@ def main(argv: list[str] | None = None) -> None:
     cached = {
         address_key(church)
         for church in existing
-        if has_pin(church) and not church.get("approx") and street_candidates(church)
+        if has_pin(church) and not church.get("approx") and has_house_number(church)
     }
-    needs_geocode = [church for church in parsed if address_key(church) not in cached]
+    needs_geocode = [
+        church
+        for church in parsed
+        if has_house_number(church) and address_key(church) not in cached
+    ]
     print(
         f"Geocoding {len({address_key(church) for church in needs_geocode})} new or changed addresses; "
         f"reusing saved locations for the rest",
@@ -1094,13 +1150,18 @@ def main(argv: list[str] | None = None) -> None:
             census_hits[key] = (lat, lng, county, approx)
             print(f"  {source} placed {church['name']} ({church['city']})", flush=True)
     for church in parsed:
-        if not street_candidates(church):
+        if not has_house_number(church):
             census_hits.pop(address_key(church), None)
-    unresolved = {
-        church["zip"]
-        for church in needs_geocode
-        if address_key(church) not in census_hits and church.get("zip")
-    }
+    unresolved: set[str] = set()
+    for church in parsed:
+        zip_code = church.get("zip")
+        if not zip_code:
+            continue
+        key = address_key(church)
+        # Numberless lines always prefer a ZIP center over a saved rooftop pin.
+        # Numbered misses need a center only when this run did not place them.
+        if not has_house_number(church) or (key not in census_hits and key not in cached):
+            unresolved.add(zip_code)
     centroids = load_postal_centroids(unresolved) if unresolved else {}
     located = resolve_locations(parsed, existing, census_hits, centroids)
     fill_missing_counties(located)

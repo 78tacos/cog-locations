@@ -23,7 +23,7 @@ jobs:
 
       - name: Refresh church data
         # A shorter state list would rewrite churches.json and drop published states.
-        run: python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX
+        run: python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY
 
       - name: Commit to main when the data changed
         run: |
@@ -34,5 +34,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- churches.json churches.js
-          git commit -m "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, and Texas church directory"
+          git commit -m "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, and Kentucky church directory"
           git push origin HEAD:main
