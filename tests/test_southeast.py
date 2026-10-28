@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import refresh
 
-PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO")
+PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "PA", "MD", "DE", "NJ")
 STATE_FIPS = {
     "FL": "12",
     "GA": "13",
@@ -33,6 +33,10 @@ STATE_FIPS = {
     "MN": "27",
     "IA": "19",
     "MO": "29",
+    "PA": "42",
+    "MD": "24",
+    "DE": "10",
+    "NJ": "34",
 }
 STATE_LABEL = {
     "FL": "Florida",
@@ -57,6 +61,10 @@ STATE_LABEL = {
     "MN": "Minnesota",
     "IA": "Iowa",
     "MO": "Missouri",
+    "PA": "Pennsylvania",
+    "MD": "Maryland",
+    "DE": "Delaware",
+    "NJ": "New Jersey",
 }
 # south, north, west, east — padded past the state line so ZIP-center pins still fit.
 BOXES = {
@@ -82,6 +90,10 @@ BOXES = {
     "MN": (43.4, 49.5, -97.3, -89.4),
     "IA": (40.3, 43.6, -96.7, -90.0),
     "MO": (35.9, 40.7, -95.9, -89.0),
+    "PA": (39.6, 42.4, -80.7, -74.5),
+    "MD": (37.8, 39.9, -79.6, -74.9),
+    "DE": (38.3, 40.0, -75.9, -74.8),
+    "NJ": (38.8, 41.5, -75.7, -73.7),
 }
 
 
@@ -93,19 +105,19 @@ class SoutheastPageTests(unittest.TestCase):
     def test_map_covers_florida_and_the_southeast(self):
         index = (ROOT / "index.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Map — Florida, the Southeast, South-Central, the Upper South, and the Midwest</title>",
+            "<title>Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic</title>",
             index,
         )
         self.assertIn(">Church of God Map</h3>", index)
         self.assertIn(
-            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri",
+            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, and New Jersey",
             index,
         )
         self.assertIn('id="st"', index)
         self.assertIn("All states", index)
         self.assertIn("BOUNDS.ALL", index)
         self.assertIn("-106.65", index)
-        self.assertIn("ALL:[[24.4,-106.65],[49.4,-75.1]]", index)
+        self.assertIn("ALL:[[24.4,-106.65],[49.4,-73.9]]", index)
         self.assertIn("VA:[[36.4,-83.9],[39.6,-75.1]]", index)
         self.assertIn("WV:[[37.0,-82.8],[40.8,-77.5]]", index)
         self.assertIn("KY:[[36.4,-89.8],[39.3,-81.8]]", index)
@@ -117,6 +129,10 @@ class SoutheastPageTests(unittest.TestCase):
         self.assertIn("MN:[[43.5,-97.2],[49.4,-89.5]]", index)
         self.assertIn("IA:[[40.4,-96.6],[43.5,-90.1]]", index)
         self.assertIn("MO:[[36.0,-95.8],[40.6,-89.1]]", index)
+        self.assertIn("PA:[[39.72,-80.52],[42.27,-74.69]]", index)
+        self.assertIn("MD:[[37.91,-79.49],[39.72,-75.05]]", index)
+        self.assertIn("DE:[[38.45,-75.79],[39.84,-75.05]]", index)
+        self.assertIn("NJ:[[38.93,-75.56],[41.36,-73.89]]", index)
         self.assertNotIn("const FL=", index)
         self.assertNotIn("viewbox=-87.7,31.1,-79.8,24.4", index)
         self.assertNotIn("Florida and Georgia</title>", index)
@@ -130,10 +146,10 @@ class SoutheastPageTests(unittest.TestCase):
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Directory — Florida, the Southeast, South-Central, the Upper South, and the Midwest</title>",
+            "<title>Church of God Directory — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic</title>",
             directory,
         )
-        self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, the Upper South, and the Midwest", directory)
+        self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic", directory)
         self.assertIn("first.state==='LA'?'Parish':'County'", directory)
         self.assertIn("/ city$/.test(first.county||'')", directory)
         self.assertNotIn("/ city$/i", directory)
@@ -157,14 +173,15 @@ class SoutheastPageTests(unittest.TestCase):
 
     def test_monthly_job_refreshes_every_published_state(self):
         workflow = (ROOT / ".github/workflows/refresh.yml").read_text(encoding="utf-8")
-        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO", workflow)
+        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ", workflow)
         self.assertIn("timeout-minutes: 90", workflow)
         self.assertNotIn("python scripts/refresh.py FL\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX\n", workflow)
+        self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO\n", workflow)
         self.assertIn(
-            "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri church directory",
+            "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, and New Jersey church directory",
             workflow,
         )
 
@@ -204,7 +221,13 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["MN"], 18)
         self.assertGreaterEqual(self.counts["IA"], 15)
         self.assertGreaterEqual(self.counts["MO"], 50)
-        self.assertGreaterEqual(len(self.churches), 4250)
+        # Locator binding for this batch is PA 107, MD 120, DE 22, NJ 98.
+        # Floors sit a little under that so a few-record drift still passes.
+        self.assertGreaterEqual(self.counts["PA"], 100)
+        self.assertGreaterEqual(self.counts["MD"], 110)
+        self.assertGreaterEqual(self.counts["DE"], 20)
+        self.assertGreaterEqual(self.counts["NJ"], 90)
+        self.assertGreaterEqual(len(self.churches), 4600)
         refresh.require_complete_download(list(PUBLISHED), self.churches)
 
     def test_records_keep_the_schema_and_own_state_counties(self):
