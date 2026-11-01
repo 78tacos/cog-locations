@@ -1251,8 +1251,8 @@
   "phone": "(813) 535-2831",
   "website": "",
   "email": "luizalvarado895@gmail.com",
-  "lat": 27.719068071305557,
-  "lng": -82.43401965257033,
+  "lat": 27.719067849083334,
+  "lng": -82.43401866368144,
   "approx": true,
   "county": "Hillsborough",
   "city_group": "Ruskin"
@@ -13227,7 +13227,7 @@
  },
  {
   "name": "Dublin",
-  "pastor": "Christopher Jordan Wilson",
+  "pastor": "",
   "address1": "2059 Claxton Dairy Road",
   "address2": "",
   "city": "Dublin",
@@ -14655,7 +14655,7 @@
  },
  {
   "name": "Iglesia de Dios Vida Nueva",
-  "pastor": "Christian A Roman Suarez",
+  "pastor": "",
   "address1": "242 Cash Street",
   "address2": "",
   "city": "Cornelia",
@@ -30040,7 +30040,7 @@
  },
  {
   "name": "Harvest Time Worship Ctr",
-  "pastor": "",
+  "pastor": "John Edwin McPeek III",
   "address1": "10152 Sipsey Valley Road North",
   "address2": "",
   "city": "Buhl",
@@ -75362,7 +75362,7 @@
  },
  {
   "name": "Hispana de Owings Mills",
-  "pastor": "Domingo Cedillos",
+  "pastor": "Walter Martinez Lemus",
   "address1": "10825 Reisterstown Road",
   "address2": "",
   "city": "Owings Mills",
