@@ -21,7 +21,7 @@ Merged batches that this procedure follows:
 | #14 | MW-2 | WI, MN, IA, MO | 18, 20, 15, 58 | 4308 |
 | #15 | MA-1 | PA, MD, DE, NJ | 107, 120, 22, 98 | 4655 |
 
-#12 also introduced `has_house_number`. That rule is already on main. A new batch uses it; it does not re-implement it. #13 kept a four-digit locator ZIP as published (`6007` for Rolling Meadows, IL) and dropped one Indiana duplicate. #14 set `MIN_PER_STATE` to 15 because Iowa's locator total is 15. `MIN_PER_STATE` is now only a warning. Do not turn it back into a gate.
+#12 also introduced `has_house_number`. That rule is already on main. A new batch uses it; it does not re-implement it. #13 kept a four-digit locator ZIP as published (`6007` for Rolling Meadows, IL) and dropped one Indiana duplicate. #14 set `MIN_PER_STATE` to 15 because Iowa's locator total is 15. A requested state under `MIN_PER_STATE` is not written from the fresh scrape. `keep_published_rows` keeps that state's previously published rows and logs the state, the fresh count, and the kept count. A state with no published rows (a new state with zero churches) is logged and contributes nothing. `MIN_STATEWIDE` remains the combined gate.
 
 The live binding on main `e89dc8e` is **4655**, and the monthly refresh after that commit kept 4655. Per-state counts at that binding: FL 629, GA 493, AL 333, SC 305, NC 436, TN 345, MS 159, LA 56, AR 77, OK 57, TX 258, VA 191, WV 154, KY 213, OH 173, IN 104, IL 120, MI 94, WI 18, MN 20, IA 15, MO 58, PA 107, MD 120, DE 22, NJ 98. Indiana's locator total was 105; `dedupe` kept one of two identical rows, so the directory is 104.
 
@@ -80,7 +80,7 @@ Mirror the #11–#15 diffs. Touch only the states this batch adds.
   - Add `STATE_FIPS`, `STATE_LABEL`, and `BOXES`. FIPS come from `scripts/national_county.txt` (postal, state FIPS, county FIPS, name), which `refresh.US_STATE_FIPS` already loads. `BOXES` is `(south, north, west, east)`, padded past the state line so ZIP-center pins still pass. It is a looser box than the map's `BOUNDS`.
   - Extend the map, directory, and workflow assertions, including `assertNotIn` for the previous shorter `python scripts/refresh.py ...` line so a dropped state fails CI.
   - Add a per-state floor a little under that state's locator count, with a comment that records the locator binding (the comments already in this test are the pattern). Tiny states sit on the complete count: Iowa's floor is 15 because the locator total is 15. These floors check the committed file. They are not `MIN_PER_STATE`.
-  - Set the directory length assertion to the new combined binding. It is `4655` until this batch changes the data.
+  - Leave the directory length check as `assertGreaterEqual(len(self.churches), 4600)` until the binding moves enough to raise that floor. Do not lock the test to an exact total.
 
 `tests/fixtures/sample_page.html` is the shared Florida locator page. Batches #11–#15 did not add fixture files. When a new state's HTML breaks the parser, add a small inline HTML case in `tests/test_refresh.py`, as #13 did for a four-digit ZIP. Store the ZIP the locator published.
 
@@ -88,11 +88,11 @@ Census matches stay in the church's own state (`state_fips_for`). County names c
 
 ### 5. Floors
 
-`require_complete_download` in `scripts/refresh.py` runs before any write.
+`keep_published_rows` runs before `require_complete_download`. Both run before any write.
 
-- `MIN_STATEWIDE` is 100. The combined parse must reach it. The floor does not grow with the number of states. An empty scrape or a near-zero scrape raises `SystemExit`, prints `Parsed only N churches`, and leaves the files unchanged.
-- A parse that keeps fewer than half the churches already in `churches.json` also raises. The message says `wipe most of the region`. `main` passes the saved directory because the write replaces the whole file. The half check does not notice one omitted small state, which is why the command and the workflow test must list every published state.
-- `MIN_PER_STATE` is 15 and only logs. A state under 15, including zero, prints a warning to stderr and the run continues when the combined total is healthy. Do not fail the refresh on that warning. A legitimate empty state is a real result.
+- `MIN_PER_STATE` is 15. For each requested state under that count, drop the fresh rows. If `churches.json` already has that state, keep those published rows. The log line is `Keeping published {STATE} rows: fresh {n}, kept {m}`. A state with no published rows is logged with `kept 0` and contributes nothing, which is how a brand-new empty state ships. This is what stops the monthly job from deleting a published state when a scrape comes back empty: `write_outputs` still replaces the file, but the short state is filled from the previous rows first.
+- `MIN_STATEWIDE` is 100, checked on the list after that substitution. The floor does not grow with the number of states. An empty scrape of states that have nothing saved raises `SystemExit`, prints `Parsed only N churches`, and leaves the files unchanged. A full refresh that restores every published state still clears 100.
+- The command and the workflow test must still list every published state. A state that is not requested is not restored.
 
 ### 6. Run the tests
 

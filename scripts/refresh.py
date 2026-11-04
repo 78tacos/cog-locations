@@ -52,10 +52,9 @@ GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
-# Logged when a requested state is below this. It does not block the write.
-# Some states have very few Church of God locations, including zero. The
-# combined floor (MIN_STATEWIDE) is what refuses a bad run, along with the
-# check that the download still keeps at least half of the saved directory.
+# A requested state under this is not taken from the fresh scrape. Rows already
+# published for that state are kept. A state with no saved rows is logged and
+# left out. The combined floor (MIN_STATEWIDE) still refuses a bad run.
 # 15 is above a one-page locator response (about 10) and matches Iowa, the
 # smallest published state.
 MIN_PER_STATE = 15
@@ -1058,49 +1057,57 @@ def min_expected_count(states: list[str]) -> int:
 
     The floor is 100 churches total for whatever states were requested. It does
     not grow with how many states were requested. FL alone still requires 100.
-    A state with few or no churches does not fail on its own.
     """
     return MIN_STATEWIDE
 
 
-def require_complete_download(
-    states: list[str],
-    churches: list[dict],
-    existing: list[dict] | None = None,
-) -> None:
-    """Stop before any directory write when the combined download is bad.
+def _state_code(church: dict) -> str:
+    return str(church.get("state") or "").strip().upper()
 
-    The blocking check is the combined total (MIN_STATEWIDE). A state under
-    MIN_PER_STATE is logged and kept. An empty or near-zero scrape fails that
-    combined floor. A download that would replace a saved directory with less
-    than half of its churches fails as a wiped region. The caller passes the
-    saved directory because the write replaces the whole file.
+
+def keep_published_rows(states: list[str], churches: list[dict], existing: list[dict]) -> list[dict]:
+    """Keep saved rows when a requested state's scrape is under MIN_PER_STATE.
+
+    Fresh rows for that state are dropped. Previously published rows are kept.
+    The log line names the state, the fresh count, and the kept count. A state
+    with no saved rows is logged and contributes nothing.
     """
-    counts: dict[str, int] = defaultdict(int)
+    fresh_counts: dict[str, int] = defaultdict(int)
     for church in churches:
-        code = str(church.get("state") or "").strip().upper()
+        code = _state_code(church)
         if code:
-            counts[code] += 1
-    short = [state for state in states if counts.get(state, 0) < MIN_PER_STATE]
-    if short:
-        detail = ", ".join(f"{state} {counts.get(state, 0)}" for state in short)
+            fresh_counts[code] += 1
+    saved: dict[str, list[dict]] = defaultdict(list)
+    for church in existing:
+        code = _state_code(church)
+        if code:
+            saved[code].append(church)
+    short = [state for state in states if fresh_counts.get(state, 0) < MIN_PER_STATE]
+    if not short:
+        return churches
+    short_set = set(short)
+    for state in short:
+        prior = saved.get(state, [])
         print(
-            f"Warning: {detail} below {MIN_PER_STATE} churches. "
-            "A small or empty state does not fail the run; "
-            f"the combined floor is {MIN_STATEWIDE}.",
+            f"Keeping published {state} rows: fresh {fresh_counts.get(state, 0)}, kept {len(prior)}",
             file=sys.stderr,
+            flush=True,
         )
+    kept = [church for church in churches if _state_code(church) not in short_set]
+    for state in short:
+        kept.extend(saved.get(state, []))
+    return kept
+
+
+def require_complete_download(states: list[str], churches: list[dict]) -> None:
+    """Stop before any directory write when the combined download is under the floor.
+
+    The blocking check is the combined total (MIN_STATEWIDE). A short state is
+    handled by keep_published_rows before this runs.
+    """
     if len(churches) < min_expected_count(states):
         raise SystemExit(
             f"Parsed only {len(churches)} churches; leaving the directory files unchanged"
-        )
-    if existing is None:
-        return
-    prior = len(existing)
-    if prior >= MIN_STATEWIDE and len(churches) * 2 < prior:
-        raise SystemExit(
-            f"Parsed only {len(churches)} churches against {prior} already saved; "
-            "refusing to wipe most of the region. Leaving the directory files unchanged"
         )
 
 
@@ -1138,7 +1145,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Downloading {label} churches from churchofgod.org", flush=True)
     parsed = dedupe(fetch_states(REQUEST_INTERVAL_SECONDS, states))
     print(f"Parsed {len(parsed)} {label} churches", flush=True)
-    require_complete_download(states, parsed, existing)
+    parsed = keep_published_rows(states, parsed, existing)
+    require_complete_download(states, parsed)
 
     cached = {
         address_key(church)

@@ -28,8 +28,6 @@ python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI
 
 The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ`). The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), and the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey). `python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ` so the next refresh keeps every published state.
 
-The write is refused when the combined download has fewer than 100 churches. That combined total is the floor that blocks a bad run: an empty scrape, a near-zero scrape, or a download that would replace the saved directory with less than half of the churches already there. The files stay unchanged. A state with few Church of God locations, or none, does not fail the run. The script logs that state and continues. The old per-state minimum of 15 is only that log line.
-
 The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/cog-locations/.
 
 ## Monthly update
