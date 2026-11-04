@@ -1,6 +1,8 @@
+import io
 import json
 import sys
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -857,26 +859,31 @@ class MultiStateCliTests(unittest.TestCase):
         self.assertEqual([church["state"] for church in combined], ["FL", "GA"])
         self.assertEqual(len(refresh.dedupe(combined)), 2)
 
-    def test_empty_state_fails_even_when_the_combined_total_clears_the_floor(self):
+    def test_empty_state_passes_when_the_region_total_is_healthy(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
-        with self.assertRaises(SystemExit) as caught:
-            refresh.require_complete_download(["FL", "TX"], florida)
-        self.assertIn("TX 0", str(caught.exception))
-        self.assertIn(str(refresh.MIN_PER_STATE), str(caught.exception))
+        self.assertGreaterEqual(len(florida), refresh.MIN_STATEWIDE)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            refresh.require_complete_download(["FL", "TX"], florida, existing=florida)
+        warning = stderr.getvalue()
+        self.assertIn("TX 0", warning)
+        self.assertIn(str(refresh.MIN_PER_STATE), warning)
 
-    def test_near_empty_state_fails_before_the_combined_floor(self):
+    def test_sparse_state_passes_when_the_region_total_is_healthy(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
         texas = [
             _church(name=f"TX {i}", state="TX", city="Houston", address1=f"{i} Texas Ave", zip="77002")
             for i in range(1, refresh.MIN_PER_STATE)
         ]
-        self.assertGreaterEqual(len(florida) + len(texas), refresh.MIN_STATEWIDE)
-        with self.assertRaises(SystemExit) as caught:
-            refresh.require_complete_download(["FL", "TX"], florida + texas)
-        self.assertIn(f"TX {refresh.MIN_PER_STATE - 1}", str(caught.exception))
+        combined = florida + texas
+        self.assertGreaterEqual(len(combined), refresh.MIN_STATEWIDE)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            refresh.require_complete_download(["FL", "TX"], combined, existing=combined)
+        self.assertIn(f"TX {refresh.MIN_PER_STATE - 1}", stderr.getvalue())
 
-    def test_per_state_floor_still_requires_the_combined_minimum(self):
-        # Enough for one state, not enough for the combined floor of 100.
+    def test_short_download_fails_the_combined_floor(self):
+        # Above the old per-state warning line, still under the combined floor of 100.
         florida = [
             _church(name=f"FL {i}", address1=f"{i} Main Street")
             for i in range(1, refresh.MIN_PER_STATE + 1)
@@ -886,20 +893,36 @@ class MultiStateCliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as caught:
             refresh.require_complete_download(["FL"], florida)
         self.assertIn(f"Parsed only {len(florida)} churches", str(caught.exception))
+        self.assertNotIn("each requested state", str(caught.exception))
 
-    def test_states_at_both_floors_are_accepted(self):
+    def test_empty_download_fails_the_combined_floor(self):
+        with self.assertRaises(SystemExit) as caught:
+            refresh.require_complete_download(["FL", "TX"], [])
+        self.assertIn("Parsed only 0 churches", str(caught.exception))
+
+    def test_wiped_region_fails_even_when_the_combined_floor_is_met(self):
+        saved = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 401)]
+        scraped = saved[:120]
+        self.assertGreaterEqual(len(scraped), refresh.MIN_STATEWIDE)
+        self.assertLess(len(scraped) * 2, len(saved))
+        with self.assertRaises(SystemExit) as caught:
+            refresh.require_complete_download(["FL"], scraped, existing=saved)
+        self.assertIn("wipe most of the region", str(caught.exception))
+        self.assertIn(str(len(saved)), str(caught.exception))
+
+    def test_states_at_the_combined_floor_are_accepted(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 101)]
         texas = [
             _church(name=f"TX {i}", state="TX", city="Houston", address1=f"{i} Texas Ave", zip="77002")
             for i in range(1, refresh.MIN_PER_STATE + 1)
         ]
-        refresh.require_complete_download(["FL", "TX"], florida + texas)
+        refresh.require_complete_download(["FL", "TX"], florida + texas, existing=florida + texas)
 
-    def test_main_does_not_write_when_one_requested_state_is_empty(self):
-        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
+    def test_main_does_not_write_a_short_download(self):
+        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 11)]
 
         def continued(*args, **kwargs):
-            raise AssertionError("refresh continued after an empty state")
+            raise AssertionError("refresh continued after a short download")
 
         original_fetch = refresh.fetch_states
         original_geocode = refresh.geocode_addresses
@@ -914,7 +937,29 @@ class MultiStateCliTests(unittest.TestCase):
             refresh.fetch_states = original_fetch
             refresh.geocode_addresses = original_geocode
             refresh.write_outputs = original_write
-        self.assertIn("TX 0", str(caught.exception))
+        self.assertIn("Parsed only 10 churches", str(caught.exception))
+
+    def test_main_does_not_write_when_the_download_wipes_the_directory(self):
+        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
+
+        def continued(*args, **kwargs):
+            raise AssertionError("refresh continued after a wiped directory")
+
+        original_fetch = refresh.fetch_states
+        original_geocode = refresh.geocode_addresses
+        original_write = refresh.write_outputs
+        refresh.fetch_states = lambda delay, states: list(florida)
+        refresh.geocode_addresses = continued
+        refresh.write_outputs = continued
+        try:
+            with self.assertRaises(SystemExit) as caught:
+                refresh.main(["FL", "TX"])
+        finally:
+            refresh.fetch_states = original_fetch
+            refresh.geocode_addresses = original_geocode
+            refresh.write_outputs = original_write
+        self.assertIn("wipe most of the region", str(caught.exception))
+        self.assertIn("4655", str(caught.exception))
 
     def test_fetch_states_single_state_does_not_sleep(self):
         sleeps: list[float] = []

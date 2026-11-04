@@ -227,8 +227,18 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["MD"], 110)
         self.assertGreaterEqual(self.counts["DE"], 20)
         self.assertGreaterEqual(self.counts["NJ"], 90)
-        self.assertGreaterEqual(len(self.churches), 4600)
-        refresh.require_complete_download(list(PUBLISHED), self.churches)
+        # Locator binding on main e89dc8e. The monthly refresh at 087692f
+        # kept the same 4655 churches.
+        self.assertEqual(len(self.churches), 4655)
+        refresh.require_complete_download(
+            list(PUBLISHED), self.churches, existing=self.churches
+        )
+        wiped = self.churches[:120]
+        self.assertGreaterEqual(len(wiped), refresh.MIN_STATEWIDE)
+        with self.assertRaises(SystemExit) as caught:
+            refresh.require_complete_download(list(PUBLISHED), wiped, existing=self.churches)
+        self.assertIn("wipe most of the region", str(caught.exception))
+        self.assertIn("4655", str(caught.exception))
 
     def test_records_keep_the_schema_and_own_state_counties(self):
         allowed = {

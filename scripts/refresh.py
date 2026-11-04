@@ -52,9 +52,12 @@ GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
-# Above a one-page locator response (about 10). Iowa is the smallest
-# published state (15 on the locator). An empty or one-page state must fail
-# even when the other states already clear the combined floor of 100.
+# Logged when a requested state is below this. It does not block the write.
+# Some states have very few Church of God locations, including zero. The
+# combined floor (MIN_STATEWIDE) is what refuses a bad run, along with the
+# check that the download still keeps at least half of the saved directory.
+# 15 is above a one-page locator response (about 10) and matches Iowa, the
+# smallest published state.
 MIN_PER_STATE = 15
 DEFAULT_STATES = ("FL",)
 NATIONAL_COUNTY_PATH = Path(__file__).with_name("national_county.txt")
@@ -1055,17 +1058,23 @@ def min_expected_count(states: list[str]) -> int:
 
     The floor is 100 churches total for whatever states were requested. It does
     not grow with how many states were requested. FL alone still requires 100.
-    A single wiped state is caught by require_complete_download.
+    A state with few or no churches does not fail on its own.
     """
     return MIN_STATEWIDE
 
 
-def require_complete_download(states: list[str], churches: list[dict]) -> None:
-    """Stop before any directory write when a requested state is missing.
+def require_complete_download(
+    states: list[str],
+    churches: list[dict],
+    existing: list[dict] | None = None,
+) -> None:
+    """Stop before any directory write when the combined download is bad.
 
-    The combined floor can be met by the other states, so each requested state
-    is counted on its own. Zero rows and a near-empty page both fail. A state
-    at MIN_PER_STATE still has to clear the combined floor with the rest.
+    The blocking check is the combined total (MIN_STATEWIDE). A state under
+    MIN_PER_STATE is logged and kept. An empty or near-zero scrape fails that
+    combined floor. A download that would replace a saved directory with less
+    than half of its churches fails as a wiped region. The caller passes the
+    saved directory because the write replaces the whole file.
     """
     counts: dict[str, int] = defaultdict(int)
     for church in churches:
@@ -1075,14 +1084,23 @@ def require_complete_download(states: list[str], churches: list[dict]) -> None:
     short = [state for state in states if counts.get(state, 0) < MIN_PER_STATE]
     if short:
         detail = ", ".join(f"{state} {counts.get(state, 0)}" for state in short)
-        raise SystemExit(
-            f"Parsed too few churches in {detail}; "
-            f"each requested state needs at least {MIN_PER_STATE}. "
-            "Leaving the directory files unchanged"
+        print(
+            f"Warning: {detail} below {MIN_PER_STATE} churches. "
+            "A small or empty state does not fail the run; "
+            f"the combined floor is {MIN_STATEWIDE}.",
+            file=sys.stderr,
         )
     if len(churches) < min_expected_count(states):
         raise SystemExit(
             f"Parsed only {len(churches)} churches; leaving the directory files unchanged"
+        )
+    if existing is None:
+        return
+    prior = len(existing)
+    if prior >= MIN_STATEWIDE and len(churches) * 2 < prior:
+        raise SystemExit(
+            f"Parsed only {len(churches)} churches against {prior} already saved; "
+            "refusing to wipe most of the region. Leaving the directory files unchanged"
         )
 
 
@@ -1120,7 +1138,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Downloading {label} churches from churchofgod.org", flush=True)
     parsed = dedupe(fetch_states(REQUEST_INTERVAL_SECONDS, states))
     print(f"Parsed {len(parsed)} {label} churches", flush=True)
-    require_complete_download(states, parsed)
+    require_complete_download(states, parsed, existing)
 
     cached = {
         address_key(church)
