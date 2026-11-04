@@ -1,4 +1,4 @@
-# Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic
+# Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, the Mid-Atlantic, the Northeast, northern New England, the Plains, the Mountain West, the Southwest, and the Pacific
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -23,10 +23,10 @@ Every record keeps the church name, pastor, street address, city, state, ZIP, ph
 5. It keeps every Florida church and records its county. A church that can't be placed is still listed in the directory without a pin.
 
 ```bash
-python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ
+python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI
 ```
 
-The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ`). The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), and the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey). `python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ` so the next refresh keeps every published state.
+The script defaults to Florida. Additional USPS state codes can be passed (`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI`). The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey), the Northeast states (New York, Connecticut, Rhode Island, and Massachusetts), the northern New England states (Vermont, New Hampshire, and Maine), the Plains states (North Dakota, South Dakota, Nebraska, and Kansas), the Mountain states (Montana, Wyoming, Colorado, Idaho, and Utah), the Southwest states (Arizona, New Mexico, and Nevada), and the Pacific states (California, Oregon, Washington, Alaska, and Hawaii). `python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI` rebuilds it. The monthly job runs `python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI` so the next refresh keeps every published state.
 
 The download pauses between pages, so a full run takes a few minutes. Review the diff before merging. Pages publishes the root files on `main`, and the live map is https://78tacos.github.io/cog-locations/.
 

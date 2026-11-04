@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic
+JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, the Mid-Atlantic, the Northeast, northern New England, the Plains, the Mountain West, the Southwest, and the Pacific
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -240,6 +240,20 @@ class DirectoryRuleTests(unittest.TestCase):
             "MD": set(refresh.COUNTY_FIPS_BY_STATE["24"].values()),
             "DE": set(refresh.COUNTY_FIPS_BY_STATE["10"].values()),
             "NJ": set(refresh.COUNTY_FIPS_BY_STATE["34"].values()),
+            "NY": set(refresh.COUNTY_FIPS_BY_STATE["36"].values()),
+            "CT": set(refresh.COUNTY_FIPS_BY_STATE["09"].values()),
+            "RI": set(refresh.COUNTY_FIPS_BY_STATE["44"].values()),
+            "MA": set(refresh.COUNTY_FIPS_BY_STATE["25"].values()),
+            "ME": set(refresh.COUNTY_FIPS_BY_STATE["23"].values()),
+            "KS": set(refresh.COUNTY_FIPS_BY_STATE["20"].values()),
+            "CO": set(refresh.COUNTY_FIPS_BY_STATE["08"].values()),
+            "AZ": set(refresh.COUNTY_FIPS_BY_STATE["04"].values()),
+            "NM": set(refresh.COUNTY_FIPS_BY_STATE["35"].values()),
+            "CA": set(refresh.COUNTY_FIPS_BY_STATE["06"].values()),
+            "OR": set(refresh.COUNTY_FIPS_BY_STATE["41"].values()),
+            "WA": set(refresh.COUNTY_FIPS_BY_STATE["53"].values()),
+            "AK": set(refresh.COUNTY_FIPS_BY_STATE["02"].values()),
+            "HI": set(refresh.COUNTY_FIPS_BY_STATE["15"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -461,14 +475,15 @@ class FormatTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), and the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey).",
+            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey), the Northeast states (New York, Connecticut, Rhode Island, and Massachusetts), the northern New England states (Vermont, New Hampshire, and Maine), the Plains states (North Dakota, South Dakota, Nebraska, and Kansas), the Mountain states (Montana, Wyoming, Colorado, Idaho, and Utah), the Southwest states (Arizona, New Mexico, and Nevada), and the Pacific states (California, Oregon, Washington, Alaska, and Hawaii).",
             text,
         )
-        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ` rebuilds it.", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI` rebuilds it.", text)
         self.assertIn(
-            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ\n```",
+            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI\n```",
             text,
         )
+        self.assertNotIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ`", text)
         self.assertNotIn("```bash\npython3 scripts/refresh.py\n```", text)
         self.assertIn("https://78tacos.github.io/cog-locations/", text)
         self.assertNotIn("stay Florida-only", text)
