@@ -400,7 +400,7 @@ class FormatTests(unittest.TestCase):
         )
         allow_lists: list[set[str]] = []
 
-        def fake_post(churches):
+        def fake_post(churches, benchmark="Public_AR_Current", vintage="Current_Current"):
             rows = []
             for index, _church_row in enumerate(churches, start=1):
                 rows.append(
@@ -768,6 +768,25 @@ class CensusStateFilterTests(unittest.TestCase):
         }
         return json.dumps(payload).encode()
 
+    def test_connecticut_point_lookup_uses_the_2020_counties(self):
+        urls: list[str] = []
+
+        def fake(url, **kwargs):
+            urls.append(url)
+            return self._response([{"STATE": "09", "COUNTY": "001"}])
+
+        original = refresh.request_bytes
+        refresh.request_bytes = fake
+        try:
+            county = refresh.county_for_point(41.1112, -73.4204, refresh.state_fips_for(["CT"]))
+        finally:
+            refresh.request_bytes = original
+        self.assertEqual(county, "Fairfield")
+        self.assertEqual(refresh.county_from_fips("09", "009"), "New Haven")
+        self.assertIn("benchmark=Public_AR_Census2020", urls[0])
+        self.assertIn("vintage=Census2020_Census2020", urls[0])
+        self.assertEqual(refresh.census_benchmark(refresh.state_fips_for(["FL"])), ("Public_AR_Current", "Current_Current"))
+
     def test_point_lookup_skips_other_states_unless_asked(self):
         raw = self._response(
             [
@@ -1028,6 +1047,22 @@ class MultiStateCliTests(unittest.TestCase):
             merged = refresh.keep_published_rows(["WY"], fresh, [])
         self.assertEqual([church["name"] for church in merged], [church["name"] for church in fresh])
         self.assertNotIn("kept 0", stderr.getvalue())
+        self.assertEqual(refresh.HELD_STATES, [])
+
+    def test_held_state_is_recorded(self):
+        saved = self._published_texas(5)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 4)
+        ]
+        refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual(refresh.HELD_STATES, [{"state": "TX", "saved": 5, "fresh": 3}])
+        longer = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 8)
+        ]
+        refresh.keep_published_rows(["TX"], longer, saved)
+        self.assertEqual(refresh.HELD_STATES, [])
 
     def test_new_state_returning_zero_is_logged_and_does_not_fail(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
@@ -1132,6 +1167,8 @@ class MultiStateCliTests(unittest.TestCase):
             refresh.fallback_geocode = original_fallback
             refresh.load_postal_centroids = original_centroids
             refresh.write_outputs = original_write
+            if refresh.HELD_STATES_PATH.exists():
+                refresh.HELD_STATES_PATH.unlink()
         self.assertEqual(len(written), 1)
         got = [church for church in written[0] if church["state"] == "IA"]
         self.assertEqual(got, saved_iowa)

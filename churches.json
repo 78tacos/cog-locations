@@ -1190,6 +1190,23 @@
   "city_group": "Bradenton"
  },
  {
+  "name": "Palabra De Vida",
+  "pastor": "Juan R Medina",
+  "address1": "5945 54th Avenue N",
+  "address2": "",
+  "city": "Kenneth City",
+  "state": "FL",
+  "zip": "33709",
+  "phone": "(727) 529-7108",
+  "website": "",
+  "email": "iglesiapdv2018@gmail.com",
+  "lat": 27.821061589993,
+  "lng": -82.715437445695,
+  "approx": false,
+  "county": "Pinellas",
+  "city_group": "Kenneth City"
+ },
+ {
   "name": "Palabra Refrescante",
   "pastor": "Ray David Velazquez",
   "address1": "7209 N Manhattan Avenue",
@@ -1234,8 +1251,8 @@
   "phone": "(813) 535-2831",
   "website": "",
   "email": "luizalvarado895@gmail.com",
-  "lat": 27.719068071305557,
-  "lng": -82.43401965257033,
+  "lat": 27.719067849083334,
+  "lng": -82.43401866368144,
   "approx": true,
   "county": "Hillsborough",
   "city_group": "Ruskin"
@@ -20392,7 +20409,7 @@
   "zip": "39520",
   "phone": "(228) 297-1886",
   "website": "",
-  "email": "Kellyjayes007@gmail.com",
+  "email": "Charleshand42@gmail.com",
   "lat": 30.314490136593,
   "lng": -89.342170062637,
   "approx": false,
@@ -24158,7 +24175,7 @@
  },
  {
   "name": "Columbia-West-City Of Hope Worship Center",
-  "pastor": "C Daniel Allen",
+  "pastor": "",
   "address1": "1403 D Avenue",
   "address2": "",
   "city": "West Columbia",
@@ -25671,7 +25688,7 @@
  },
  {
   "name": "Dovesville",
-  "pastor": "",
+  "pastor": "Robert Gene Goins",
   "address1": "3717 N Gov Williams Highway",
   "address2": "",
   "city": "Darlington",
@@ -29258,7 +29275,7 @@
  },
  {
   "name": "Great Falls",
-  "pastor": "Clyde Weldon Hardin",
+  "pastor": "",
   "address1": "34 Underwood Avenue",
   "address2": "",
   "city": "Great Falls",
@@ -45153,7 +45170,7 @@
  },
  {
   "name": "Westminster",
-  "pastor": "",
+  "pastor": "Clyde Weldon Hardin",
   "address1": "114 N Hampton Street",
   "address2": "",
   "city": "Westminster",
@@ -79352,7 +79369,7 @@
   "lat": 41.1112,
   "lng": -73.4204,
   "approx": true,
-  "county": "",
+  "county": "Fairfield",
   "city_group": "Norwalk"
  },
  {
@@ -91137,23 +91154,6 @@
   "city_group": "Pacoima"
  },
  {
-  "name": "Palabra De Vida",
-  "pastor": "Juan R Medina",
-  "address1": "350013th Avenue N",
-  "address2": "",
-  "city": "St. Petersburg",
-  "state": "FL",
-  "zip": "33713",
-  "phone": "(727) 529-7108",
-  "website": "",
-  "email": "iglesiapdv2018@gmail.com",
-  "lat": 27.788266,
-  "lng": -82.677461,
-  "approx": true,
-  "county": "Pinellas",
-  "city_group": "Saint Petersburg"
- },
- {
   "name": "Palabra Viva",
   "pastor": "Jose H Guardado",
   "address1": "7422 S Vermont Avenue",
@@ -95281,7 +95281,7 @@
   "lat": 41.462724,
   "lng": -72.805071,
   "approx": true,
-  "county": "",
+  "county": "New Haven",
   "city_group": "Wallingford"
  },
  {
