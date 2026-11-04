@@ -91,6 +91,7 @@ Census matches stay in the church's own state (`state_fips_for`). County names c
 `keep_published_rows` runs before `require_complete_download`. Both run before any write.
 
 - `MIN_PER_STATE` is 15. For each requested state under that count, drop the fresh rows. If `churches.json` already has that state, keep those published rows. The log line is `Keeping published {STATE} rows: fresh {n}, kept {m}`. A state with no published rows is logged with `kept 0` and contributes nothing, which is how a brand-new empty state ships. This is what stops the monthly job from deleting a published state when a scrape comes back empty: `write_outputs` still replaces the file, but the short state is filled from the previous rows first.
+- `fetch_churches` tags a row whose state is blank with the state code of that locator request, before dedupe, and logs how many rows were backfilled. A city line like `Des Moines IA 50309` (no commas) otherwise misses `_CITY_RE` and would be published again beside the kept rows.
 - `MIN_STATEWIDE` is 100, checked on the list after that substitution. The floor does not grow with the number of states. An empty scrape of states that have nothing saved raises `SystemExit`, prints `Parsed only N churches`, and leaves the files unchanged. A full refresh that restores every published state still clears 100.
 - The command and the workflow test must still list every published state. A state that is not requested is not restored.
 

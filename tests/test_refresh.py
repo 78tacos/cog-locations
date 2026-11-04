@@ -896,6 +896,57 @@ class MultiStateCliTests(unittest.TestCase):
         self.assertIn("fresh 5", log)
         self.assertIn("kept 20", log)
 
+    def test_blank_state_row_from_an_iowa_fetch_is_tagged_ia(self):
+        html = (
+            "<p>Results 1 to 1 of 1</p>"
+            "<p><b>Capitol Church</b></p><p>Pastor: A Pastor</p>"
+            "<p>1 Main Street</p><p>Des Moines IA 50309</p>"
+            "<p>Phone: (515) 555-0100</p>"
+        )
+        original = refresh.request_bytes
+        refresh.request_bytes = lambda url, **kwargs: html.encode("iso-8859-1")
+        stderr = io.StringIO()
+        try:
+            with redirect_stderr(stderr):
+                churches = refresh.fetch_churches(0, "IA")
+        finally:
+            refresh.request_bytes = original
+        self.assertEqual(len(churches), 1)
+        self.assertEqual(churches[0]["state"], "IA")
+        self.assertEqual(churches[0]["name"], "Capitol Church")
+        self.assertIn("Backfilled 1 blank-state IA rows", stderr.getvalue())
+
+    def test_short_iowa_run_with_blank_states_keeps_saved_rows_once(self):
+        saved = [
+            _church(
+                name=f"IA {i}",
+                state="IA",
+                city="Des Moines",
+                address1=f"{i} Main Street",
+                zip="50309",
+            )
+            for i in range(1, 4)
+        ]
+        blocks = ["<p>Results 1 to 3 of 3</p>"]
+        for church in saved:
+            blocks.append(
+                f"<p><b>{church['name']}</b></p><p>Pastor: A Pastor</p>"
+                f"<p>{church['address1']}</p><p>Des Moines IA 50309</p>"
+                "<p>Phone: (515) 555-0100</p>"
+            )
+        html = "".join(blocks)
+        original = refresh.request_bytes
+        refresh.request_bytes = lambda url, **kwargs: html.encode("iso-8859-1")
+        try:
+            fresh = refresh.dedupe(refresh.fetch_churches(0, "IA"))
+        finally:
+            refresh.request_bytes = original
+        self.assertTrue(all(church["state"] == "IA" for church in fresh))
+        self.assertLess(len(fresh), refresh.MIN_PER_STATE)
+        merged = refresh.keep_published_rows(["IA"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertEqual(len(merged), len({church["name"] for church in merged}))
+
     def test_new_state_returning_zero_is_logged_and_does_not_fail(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
         self.assertGreaterEqual(len(florida), refresh.MIN_STATEWIDE)
@@ -959,6 +1010,49 @@ class MultiStateCliTests(unittest.TestCase):
             refresh.geocode_addresses = original_geocode
             refresh.write_outputs = original_write
         self.assertIn("Parsed only 0 churches", str(caught.exception))
+
+    def test_main_writes_kept_rows_for_a_short_published_state(self):
+        fresh_iowa = [
+            _church(
+                name=f"Fresh IA {i}",
+                state="IA",
+                city="Des Moines",
+                address1=f"{i} Locust Street",
+                zip="50309",
+            )
+            for i in range(1, 6)
+        ]
+        florida = [
+            _church(name=f"FL {i}", address1=f"Oak Street", zip="")
+            for i in range(1, 101)
+        ]
+        saved = refresh.load_existing(ROOT / "churches.json")
+        saved_iowa = [church for church in saved if church["state"] == "IA"]
+        self.assertGreaterEqual(len(saved_iowa), refresh.MIN_PER_STATE)
+        written: list[list[dict]] = []
+
+        original_fetch = refresh.fetch_states
+        original_geocode = refresh.geocode_addresses
+        original_fallback = refresh.fallback_geocode
+        original_centroids = refresh.load_postal_centroids
+        original_write = refresh.write_outputs
+        refresh.fetch_states = lambda delay, states: list(florida) + list(fresh_iowa)
+        refresh.geocode_addresses = lambda churches, allowed: {}
+        refresh.fallback_geocode = lambda church, sleep=None: None
+        refresh.load_postal_centroids = lambda needed: {}
+        refresh.write_outputs = lambda json_path, js_path, churches: written.append(list(churches))
+        try:
+            refresh.main(["FL", "IA"])
+        finally:
+            refresh.fetch_states = original_fetch
+            refresh.geocode_addresses = original_geocode
+            refresh.fallback_geocode = original_fallback
+            refresh.load_postal_centroids = original_centroids
+            refresh.write_outputs = original_write
+        self.assertEqual(len(written), 1)
+        got = [church for church in written[0] if church["state"] == "IA"]
+        self.assertEqual(got, saved_iowa)
+        self.assertFalse(any(church["name"].startswith("Fresh IA") for church in written[0]))
 
     def test_fetch_states_single_state_does_not_sleep(self):
         sleeps: list[float] = []

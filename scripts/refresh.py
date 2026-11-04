@@ -851,6 +851,28 @@ def locator_page_url(state: str, offset: int) -> str:
     return f"{LOCATOR_URL}?{query}"
 
 
+def backfill_blank_state(churches: list[dict], state: str) -> list[dict]:
+    """Tag a stateless row with the state this locator request asked for.
+
+    A city line that misses _CITY_RE leaves state empty. The row would then
+    miss that state's count, and dedupe would keep it beside the saved copy.
+    """
+    code = state.strip().upper()
+    filled = 0
+    for church in churches:
+        if _state_code(church):
+            continue
+        church["state"] = code
+        filled += 1
+    if filled:
+        print(
+            f"Backfilled {filled} blank-state {code} rows",
+            file=sys.stderr,
+            flush=True,
+        )
+    return churches
+
+
 def fetch_churches(delay: float, state: str = "FL") -> list[dict]:
     offset = 0
     churches: list[dict] = []
@@ -869,7 +891,7 @@ def fetch_churches(delay: float, state: str = "FL") -> list[dict]:
         start, end, total = counts
         print(f"  results {start}–{end} of {total}", flush=True)
         if end >= total:
-            return churches
+            return backfill_blank_state(churches, state)
         offset = end
         time.sleep(delay)
     raise RuntimeError("Stopped after too many locator pages")
