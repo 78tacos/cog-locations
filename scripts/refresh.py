@@ -52,9 +52,11 @@ GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
-# Above a one-page locator response (about 10). Iowa is the smallest
-# published state (15 on the locator). An empty or one-page state must fail
-# even when the other states already clear the combined floor of 100.
+# A requested state under this is not taken from the fresh scrape. Rows already
+# published for that state are kept. A state with no saved rows is logged and
+# left out. The combined floor (MIN_STATEWIDE) still refuses a bad run.
+# 15 is above a one-page locator response (about 10) and matches Iowa, the
+# smallest published state.
 MIN_PER_STATE = 15
 DEFAULT_STATES = ("FL",)
 NATIONAL_COUNTY_PATH = Path(__file__).with_name("national_county.txt")
@@ -849,6 +851,28 @@ def locator_page_url(state: str, offset: int) -> str:
     return f"{LOCATOR_URL}?{query}"
 
 
+def backfill_blank_state(churches: list[dict], state: str) -> list[dict]:
+    """Tag a stateless row with the state this locator request asked for.
+
+    A city line that misses _CITY_RE leaves state empty. The row would then
+    miss that state's count, and dedupe would keep it beside the saved copy.
+    """
+    code = state.strip().upper()
+    filled = 0
+    for church in churches:
+        if _state_code(church):
+            continue
+        church["state"] = code
+        filled += 1
+    if filled:
+        print(
+            f"Backfilled {filled} blank-state {code} rows",
+            file=sys.stderr,
+            flush=True,
+        )
+    return churches
+
+
 def fetch_churches(delay: float, state: str = "FL") -> list[dict]:
     offset = 0
     churches: list[dict] = []
@@ -867,7 +891,7 @@ def fetch_churches(delay: float, state: str = "FL") -> list[dict]:
         start, end, total = counts
         print(f"  results {start}–{end} of {total}", flush=True)
         if end >= total:
-            return churches
+            return backfill_blank_state(churches, state)
         offset = end
         time.sleep(delay)
     raise RuntimeError("Stopped after too many locator pages")
@@ -1055,31 +1079,54 @@ def min_expected_count(states: list[str]) -> int:
 
     The floor is 100 churches total for whatever states were requested. It does
     not grow with how many states were requested. FL alone still requires 100.
-    A single wiped state is caught by require_complete_download.
     """
     return MIN_STATEWIDE
 
 
-def require_complete_download(states: list[str], churches: list[dict]) -> None:
-    """Stop before any directory write when a requested state is missing.
+def _state_code(church: dict) -> str:
+    return str(church.get("state") or "").strip().upper()
 
-    The combined floor can be met by the other states, so each requested state
-    is counted on its own. Zero rows and a near-empty page both fail. A state
-    at MIN_PER_STATE still has to clear the combined floor with the rest.
+
+def keep_published_rows(states: list[str], churches: list[dict], existing: list[dict]) -> list[dict]:
+    """Keep saved rows when a requested state's scrape is under MIN_PER_STATE.
+
+    Fresh rows for that state are dropped. Previously published rows are kept.
+    The log line names the state, the fresh count, and the kept count. A state
+    with no saved rows is logged and contributes nothing.
     """
-    counts: dict[str, int] = defaultdict(int)
+    fresh_counts: dict[str, int] = defaultdict(int)
     for church in churches:
-        code = str(church.get("state") or "").strip().upper()
+        code = _state_code(church)
         if code:
-            counts[code] += 1
-    short = [state for state in states if counts.get(state, 0) < MIN_PER_STATE]
-    if short:
-        detail = ", ".join(f"{state} {counts.get(state, 0)}" for state in short)
-        raise SystemExit(
-            f"Parsed too few churches in {detail}; "
-            f"each requested state needs at least {MIN_PER_STATE}. "
-            "Leaving the directory files unchanged"
+            fresh_counts[code] += 1
+    saved: dict[str, list[dict]] = defaultdict(list)
+    for church in existing:
+        code = _state_code(church)
+        if code:
+            saved[code].append(church)
+    short = [state for state in states if fresh_counts.get(state, 0) < MIN_PER_STATE]
+    if not short:
+        return churches
+    short_set = set(short)
+    for state in short:
+        prior = saved.get(state, [])
+        print(
+            f"Keeping published {state} rows: fresh {fresh_counts.get(state, 0)}, kept {len(prior)}",
+            file=sys.stderr,
+            flush=True,
         )
+    kept = [church for church in churches if _state_code(church) not in short_set]
+    for state in short:
+        kept.extend(saved.get(state, []))
+    return kept
+
+
+def require_complete_download(states: list[str], churches: list[dict]) -> None:
+    """Stop before any directory write when the combined download is under the floor.
+
+    The blocking check is the combined total (MIN_STATEWIDE). A short state is
+    handled by keep_published_rows before this runs.
+    """
     if len(churches) < min_expected_count(states):
         raise SystemExit(
             f"Parsed only {len(churches)} churches; leaving the directory files unchanged"
@@ -1120,6 +1167,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Downloading {label} churches from churchofgod.org", flush=True)
     parsed = dedupe(fetch_states(REQUEST_INTERVAL_SECONDS, states))
     print(f"Parsed {len(parsed)} {label} churches", flush=True)
+    parsed = keep_published_rows(states, parsed, existing)
     require_complete_download(states, parsed)
 
     cached = {

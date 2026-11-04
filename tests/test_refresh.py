@@ -1,6 +1,8 @@
+import io
 import json
 import sys
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -857,26 +859,109 @@ class MultiStateCliTests(unittest.TestCase):
         self.assertEqual([church["state"] for church in combined], ["FL", "GA"])
         self.assertEqual(len(refresh.dedupe(combined)), 2)
 
-    def test_empty_state_fails_even_when_the_combined_total_clears_the_floor(self):
-        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
-        with self.assertRaises(SystemExit) as caught:
-            refresh.require_complete_download(["FL", "TX"], florida)
-        self.assertIn("TX 0", str(caught.exception))
-        self.assertIn(str(refresh.MIN_PER_STATE), str(caught.exception))
-
-    def test_near_empty_state_fails_before_the_combined_floor(self):
-        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
-        texas = [
-            _church(name=f"TX {i}", state="TX", city="Houston", address1=f"{i} Texas Ave", zip="77002")
-            for i in range(1, refresh.MIN_PER_STATE)
+    def _published_texas(self, count: int) -> list[dict]:
+        return [
+            _church(name=f"Saved TX {i}", state="TX", city="Houston", address1=f"{i} Saved Ave", zip="77002")
+            for i in range(1, count + 1)
         ]
-        self.assertGreaterEqual(len(florida) + len(texas), refresh.MIN_STATEWIDE)
-        with self.assertRaises(SystemExit) as caught:
-            refresh.require_complete_download(["FL", "TX"], florida + texas)
-        self.assertIn(f"TX {refresh.MIN_PER_STATE - 1}", str(caught.exception))
 
-    def test_per_state_floor_still_requires_the_combined_minimum(self):
-        # Enough for one state, not enough for the combined floor of 100.
+    def test_published_state_returning_zero_keeps_old_rows(self):
+        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
+        saved = self._published_texas(20)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["FL", "TX"], florida, saved)
+        self.assertEqual([church["name"] for church in merged if church["state"] == "TX"], [church["name"] for church in saved])
+        self.assertEqual(len([church for church in merged if church["state"] == "FL"]), len(florida))
+        log = stderr.getvalue()
+        self.assertIn("TX", log)
+        self.assertIn("fresh 0", log)
+        self.assertIn("kept 20", log)
+
+    def test_published_state_returning_five_keeps_old_rows(self):
+        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
+        fresh_texas = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 6)
+        ]
+        saved = self._published_texas(20)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["FL", "TX"], florida + fresh_texas, saved)
+        texas_names = [church["name"] for church in merged if church["state"] == "TX"]
+        self.assertEqual(texas_names, [church["name"] for church in saved])
+        self.assertFalse(any(name.startswith("Fresh TX") for name in texas_names))
+        log = stderr.getvalue()
+        self.assertIn("TX", log)
+        self.assertIn("fresh 5", log)
+        self.assertIn("kept 20", log)
+
+    def test_blank_state_row_from_an_iowa_fetch_is_tagged_ia(self):
+        html = (
+            "<p>Results 1 to 1 of 1</p>"
+            "<p><b>Capitol Church</b></p><p>Pastor: A Pastor</p>"
+            "<p>1 Main Street</p><p>Des Moines IA 50309</p>"
+            "<p>Phone: (515) 555-0100</p>"
+        )
+        original = refresh.request_bytes
+        refresh.request_bytes = lambda url, **kwargs: html.encode("iso-8859-1")
+        stderr = io.StringIO()
+        try:
+            with redirect_stderr(stderr):
+                churches = refresh.fetch_churches(0, "IA")
+        finally:
+            refresh.request_bytes = original
+        self.assertEqual(len(churches), 1)
+        self.assertEqual(churches[0]["state"], "IA")
+        self.assertEqual(churches[0]["name"], "Capitol Church")
+        self.assertIn("Backfilled 1 blank-state IA rows", stderr.getvalue())
+
+    def test_short_iowa_run_with_blank_states_keeps_saved_rows_once(self):
+        saved = [
+            _church(
+                name=f"IA {i}",
+                state="IA",
+                city="Des Moines",
+                address1=f"{i} Main Street",
+                zip="50309",
+            )
+            for i in range(1, 4)
+        ]
+        blocks = ["<p>Results 1 to 3 of 3</p>"]
+        for church in saved:
+            blocks.append(
+                f"<p><b>{church['name']}</b></p><p>Pastor: A Pastor</p>"
+                f"<p>{church['address1']}</p><p>Des Moines IA 50309</p>"
+                "<p>Phone: (515) 555-0100</p>"
+            )
+        html = "".join(blocks)
+        original = refresh.request_bytes
+        refresh.request_bytes = lambda url, **kwargs: html.encode("iso-8859-1")
+        try:
+            fresh = refresh.dedupe(refresh.fetch_churches(0, "IA"))
+        finally:
+            refresh.request_bytes = original
+        self.assertTrue(all(church["state"] == "IA" for church in fresh))
+        self.assertLess(len(fresh), refresh.MIN_PER_STATE)
+        merged = refresh.keep_published_rows(["IA"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertEqual(len(merged), len({church["name"] for church in merged}))
+
+    def test_new_state_returning_zero_is_logged_and_does_not_fail(self):
+        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
+        self.assertGreaterEqual(len(florida), refresh.MIN_STATEWIDE)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["FL", "WY"], florida, florida)
+            refresh.require_complete_download(["FL", "WY"], merged)
+        self.assertEqual([church["state"] for church in merged], ["FL"] * len(florida))
+        log = stderr.getvalue()
+        self.assertIn("WY", log)
+        self.assertIn("fresh 0", log)
+        self.assertIn("kept 0", log)
+
+    def test_short_download_fails_the_combined_floor(self):
+        # Above the old per-state warning line, still under the combined floor of 100.
         florida = [
             _church(name=f"FL {i}", address1=f"{i} Main Street")
             for i in range(1, refresh.MIN_PER_STATE + 1)
@@ -886,8 +971,14 @@ class MultiStateCliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as caught:
             refresh.require_complete_download(["FL"], florida)
         self.assertIn(f"Parsed only {len(florida)} churches", str(caught.exception))
+        self.assertNotIn("each requested state", str(caught.exception))
 
-    def test_states_at_both_floors_are_accepted(self):
+    def test_empty_download_fails_the_combined_floor(self):
+        with self.assertRaises(SystemExit) as caught:
+            refresh.require_complete_download(["FL", "TX"], [])
+        self.assertIn("Parsed only 0 churches", str(caught.exception))
+
+    def test_states_at_the_combined_floor_are_accepted(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 101)]
         texas = [
             _church(name=f"TX {i}", state="TX", city="Houston", address1=f"{i} Texas Ave", zip="77002")
@@ -895,26 +986,73 @@ class MultiStateCliTests(unittest.TestCase):
         ]
         refresh.require_complete_download(["FL", "TX"], florida + texas)
 
-    def test_main_does_not_write_when_one_requested_state_is_empty(self):
-        florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
+    def test_main_does_not_write_a_short_download(self):
+        # Wyoming is not published, so a short scrape has no rows to keep.
+        wyoming = [
+            _church(name=f"WY {i}", state="WY", city="Cheyenne", address1=f"{i} Capitol Ave", zip="82001")
+            for i in range(1, 11)
+        ]
 
         def continued(*args, **kwargs):
-            raise AssertionError("refresh continued after an empty state")
+            raise AssertionError("refresh continued after a short download")
 
         original_fetch = refresh.fetch_states
         original_geocode = refresh.geocode_addresses
         original_write = refresh.write_outputs
-        refresh.fetch_states = lambda delay, states: list(florida)
+        refresh.fetch_states = lambda delay, states: list(wyoming)
         refresh.geocode_addresses = continued
         refresh.write_outputs = continued
         try:
             with self.assertRaises(SystemExit) as caught:
-                refresh.main(["FL", "TX"])
+                refresh.main(["WY"])
         finally:
             refresh.fetch_states = original_fetch
             refresh.geocode_addresses = original_geocode
             refresh.write_outputs = original_write
-        self.assertIn("TX 0", str(caught.exception))
+        self.assertIn("Parsed only 0 churches", str(caught.exception))
+
+    def test_main_writes_kept_rows_for_a_short_published_state(self):
+        fresh_iowa = [
+            _church(
+                name=f"Fresh IA {i}",
+                state="IA",
+                city="Des Moines",
+                address1=f"{i} Locust Street",
+                zip="50309",
+            )
+            for i in range(1, 6)
+        ]
+        florida = [
+            _church(name=f"FL {i}", address1=f"Oak Street", zip="")
+            for i in range(1, 101)
+        ]
+        saved = refresh.load_existing(ROOT / "churches.json")
+        saved_iowa = [church for church in saved if church["state"] == "IA"]
+        self.assertGreaterEqual(len(saved_iowa), refresh.MIN_PER_STATE)
+        written: list[list[dict]] = []
+
+        original_fetch = refresh.fetch_states
+        original_geocode = refresh.geocode_addresses
+        original_fallback = refresh.fallback_geocode
+        original_centroids = refresh.load_postal_centroids
+        original_write = refresh.write_outputs
+        refresh.fetch_states = lambda delay, states: list(florida) + list(fresh_iowa)
+        refresh.geocode_addresses = lambda churches, allowed: {}
+        refresh.fallback_geocode = lambda church, sleep=None: None
+        refresh.load_postal_centroids = lambda needed: {}
+        refresh.write_outputs = lambda json_path, js_path, churches: written.append(list(churches))
+        try:
+            refresh.main(["FL", "IA"])
+        finally:
+            refresh.fetch_states = original_fetch
+            refresh.geocode_addresses = original_geocode
+            refresh.fallback_geocode = original_fallback
+            refresh.load_postal_centroids = original_centroids
+            refresh.write_outputs = original_write
+        self.assertEqual(len(written), 1)
+        got = [church for church in written[0] if church["state"] == "IA"]
+        self.assertEqual(got, saved_iowa)
+        self.assertFalse(any(church["name"].startswith("Fresh IA") for church in written[0]))
 
     def test_fetch_states_single_state_does_not_sleep(self):
         sleeps: list[float] = []
