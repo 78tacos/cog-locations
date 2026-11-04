@@ -27,7 +27,7 @@ jobs:
         run: python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI
 
       - name: Report held states
-        if: success()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

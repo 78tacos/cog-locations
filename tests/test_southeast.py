@@ -275,6 +275,8 @@ class SoutheastPageTests(unittest.TestCase):
         self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI", workflow)
         self.assertIn("timeout-minutes: 90", workflow)
         self.assertIn("issues: write", workflow)
+        self.assertIn("continue-on-error: true", workflow)
+        self.assertNotIn("if: success()", workflow)
         self.assertIn("::warning::Held", workflow)
         self.assertIn("GITHUB_STEP_SUMMARY", workflow)
         self.assertIn('Monthly refresh held states', workflow)

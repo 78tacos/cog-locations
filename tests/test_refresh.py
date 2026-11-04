@@ -586,6 +586,23 @@ class FallbackGeocodeTests(unittest.TestCase):
     def test_city_spelling_fixed(self):
         self.assertEqual(refresh.clean_city("Brandenton"), "Bradenton")
 
+    def test_connecticut_fallback_keeps_the_pin_and_uses_the_legacy_county(self):
+        church = _church(state="CT", city="Norwalk", zip="06856", address1="10 Main Street")
+        seen: list[tuple[float, float, set[str]]] = []
+
+        def lookup(lat, lng, allowed):
+            seen.append((lat, lng, set(allowed)))
+            return "Fairfield"
+
+        original = refresh.county_for_point
+        refresh.county_for_point = lookup
+        try:
+            hit = self._run(church, census=None, nominatim=(41.12, -73.41, "Western Connecticut"))
+        finally:
+            refresh.county_for_point = original
+        self.assertEqual(hit, (41.12, -73.41, "Fairfield", "nominatim", False))
+        self.assertEqual(seen, [(41.12, -73.41, {"09"})])
+
     def test_first_exact_match_wins(self):
         hit = self._run(_church(), census=None, nominatim=(27.0, -82.0, "Pasco"), arcgis=(1.0, 1.0, "X"))
         self.assertEqual(hit, (27.0, -82.0, "Pasco", "nominatim", False))

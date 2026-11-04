@@ -624,15 +624,31 @@ def fallback_geocode(church: dict, sleep=time.sleep) -> tuple[float, float, str,
                 hit = None
             sleep(pause)
             if hit is not None:
-                return hit[0], hit[1], hit[2], source, False
+                lat, lng, county = hit
+                return lat, lng, _fallback_county(church, lat, lng, county), source, False
     if ambiguous:
         spread = max(_distance_m(a[:2], b[:2]) for a in ambiguous for b in ambiguous)
         if spread <= NEIGHBORHOOD_METERS:
             lat = sum(point[0] for point in ambiguous) / len(ambiguous)
             lng = sum(point[1] for point in ambiguous) / len(ambiguous)
             county = next((point[2] for point in ambiguous if point[2]), "")
-            return lat, lng, county, "ambiguous-street", True
+            return lat, lng, _fallback_county(church, lat, lng, county), "ambiguous-street", True
     return None
+
+
+def _fallback_county(church: dict, lat: float, lng: float, county: str) -> str:
+    """Keep a fallback pin, but take Connecticut's county from the 2020 vintage.
+
+    Nominatim and ArcGIS can name a Connecticut planning region. county_for_point
+    already asks Census for the legacy county.
+    """
+    if allowed_fips_for_church(church) != frozenset({CONNECTICUT_FIPS}):
+        return county
+    try:
+        return county_for_point(lat, lng, allowed_fips_for_church(church)) or ""
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as error:
+        print(f"  county lookup failed for {church['name']}: {error}", file=sys.stderr)
+        return ""
 
 
 def resolve_locations(
@@ -1138,25 +1154,19 @@ def keep_published_rows(states: list[str], churches: list[dict], existing: list[
         if code:
             saved[code].append(church)
     hold: list[str] = []
+    held_rows = []
     for state in states:
         fresh_count = fresh_counts.get(state, 0)
         if fresh_count >= MIN_PER_STATE:
             continue
         prior = saved.get(state, [])
         if prior:
-            if fresh_count == 0 or fresh_count < len(prior):
+            if fresh_count < len(prior):
                 hold.append(state)
+                held_rows.append({"state": state, "saved": len(prior), "fresh": fresh_count})
             continue
         if fresh_count == 0:
             hold.append(state)
-    held_rows = []
-    for state in hold:
-        prior = saved.get(state, [])
-        if not prior:
-            continue
-        held_rows.append(
-            {"state": state, "saved": len(prior), "fresh": fresh_counts.get(state, 0)}
-        )
     # Replaced on every call so a later scrape that holds nothing does not
     # keep the previous report.
     global HELD_STATES
