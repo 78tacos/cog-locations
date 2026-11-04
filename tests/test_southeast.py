@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import refresh
 
-PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "PA", "MD", "DE", "NJ")
+PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "PA", "MD", "DE", "NJ", "NY", "CT", "RI", "MA", "VT", "NH", "ME", "ND", "SD", "NE", "KS", "MT", "WY", "CO", "ID", "UT", "AZ", "NM", "NV", "CA", "OR", "WA", "AK", "HI")
 STATE_FIPS = {
     "FL": "12",
     "GA": "13",
@@ -37,6 +37,30 @@ STATE_FIPS = {
     "MD": "24",
     "DE": "10",
     "NJ": "34",
+    "NY": "36",
+    "CT": "09",
+    "RI": "44",
+    "MA": "25",
+    "VT": "50",
+    "NH": "33",
+    "ME": "23",
+    "ND": "38",
+    "SD": "46",
+    "NE": "31",
+    "KS": "20",
+    "MT": "30",
+    "WY": "56",
+    "CO": "08",
+    "ID": "16",
+    "UT": "49",
+    "AZ": "04",
+    "NM": "35",
+    "NV": "32",
+    "CA": "06",
+    "OR": "41",
+    "WA": "53",
+    "AK": "02",
+    "HI": "15",
 }
 STATE_LABEL = {
     "FL": "Florida",
@@ -65,6 +89,30 @@ STATE_LABEL = {
     "MD": "Maryland",
     "DE": "Delaware",
     "NJ": "New Jersey",
+    "NY": "New York",
+    "CT": "Connecticut",
+    "RI": "Rhode Island",
+    "MA": "Massachusetts",
+    "VT": "Vermont",
+    "NH": "New Hampshire",
+    "ME": "Maine",
+    "ND": "North Dakota",
+    "SD": "South Dakota",
+    "NE": "Nebraska",
+    "KS": "Kansas",
+    "MT": "Montana",
+    "WY": "Wyoming",
+    "CO": "Colorado",
+    "ID": "Idaho",
+    "UT": "Utah",
+    "AZ": "Arizona",
+    "NM": "New Mexico",
+    "NV": "Nevada",
+    "CA": "California",
+    "OR": "Oregon",
+    "WA": "Washington",
+    "AK": "Alaska",
+    "HI": "Hawaii",
 }
 # south, north, west, east — padded past the state line so ZIP-center pins still fit.
 BOXES = {
@@ -94,6 +142,30 @@ BOXES = {
     "MD": (37.8, 39.9, -79.6, -74.9),
     "DE": (38.3, 40.0, -75.9, -74.8),
     "NJ": (38.8, 41.5, -75.7, -73.7),
+    "NY": (40.3, 45.2, -79.9, -71.7),
+    "CT": (40.8, 42.2, -73.9, -71.6),
+    "RI": (41.0, 42.2, -72.0, -71.0),
+    "MA": (41.1, 43.0, -73.6, -69.8),
+    "VT": (42.6, 45.2, -73.6, -71.3),
+    "NH": (42.6, 45.4, -72.7, -70.5),
+    "ME": (42.8, 47.6, -71.2, -66.8),
+    "ND": (45.8, 49.1, -104.2, -96.4),
+    "SD": (42.3, 46.1, -104.2, -96.3),
+    "NE": (39.8, 43.2, -104.2, -95.1),
+    "KS": (36.8, 40.2, -102.2, -94.4),
+    "MT": (44.2, 49.1, -116.2, -103.9),
+    "WY": (40.8, 45.2, -111.2, -103.9),
+    "CO": (36.8, 41.2, -109.2, -101.9),
+    "ID": (41.8, 49.1, -117.4, -110.9),
+    "UT": (36.8, 42.2, -114.2, -108.9),
+    "AZ": (31.2, 37.2, -115.0, -108.9),
+    "NM": (31.2, 37.2, -109.2, -102.9),
+    "NV": (34.8, 42.2, -120.2, -113.9),
+    "CA": (32.3, 42.2, -124.6, -114.0),
+    "OR": (41.8, 46.4, -124.7, -116.3),
+    "WA": (45.4, 49.1, -124.9, -116.8),
+    "AK": (51.0, 71.6, -180.0, -129.7),
+    "HI": (18.7, 22.4, -160.4, -154.6),
 }
 
 
@@ -105,19 +177,20 @@ class SoutheastPageTests(unittest.TestCase):
     def test_map_covers_florida_and_the_southeast(self):
         index = (ROOT / "index.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic</title>",
+            "<title>Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, the Mid-Atlantic, the Northeast, northern New England, the Plains, the Mountain West, the Southwest, and the Pacific</title>",
             index,
         )
         self.assertIn(">Church of God Map</h3>", index)
         self.assertIn(
-            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, and New Jersey",
+            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, New Jersey, New York, Connecticut, Rhode Island, Massachusetts, Vermont, New Hampshire, Maine, North Dakota, South Dakota, Nebraska, Kansas, Montana, Wyoming, Colorado, Idaho, Utah, Arizona, New Mexico, Nevada, California, Oregon, Washington, Alaska, and Hawaii",
             index,
         )
         self.assertIn('id="st"', index)
         self.assertIn("All states", index)
         self.assertIn("BOUNDS.ALL", index)
         self.assertIn("-106.65", index)
-        self.assertIn("ALL:[[24.4,-106.65],[49.4,-73.9]]", index)
+        self.assertIn("ALL:[[18.91,-179.15],[71.39,-66.95]]", index)
+        self.assertNotIn("ALL:[[24.4,-106.65],[49.4,-73.9]]", index)
         self.assertIn("VA:[[36.4,-83.9],[39.6,-75.1]]", index)
         self.assertIn("WV:[[37.0,-82.8],[40.8,-77.5]]", index)
         self.assertIn("KY:[[36.4,-89.8],[39.3,-81.8]]", index)
@@ -133,6 +206,30 @@ class SoutheastPageTests(unittest.TestCase):
         self.assertIn("MD:[[37.91,-79.49],[39.72,-75.05]]", index)
         self.assertIn("DE:[[38.45,-75.79],[39.84,-75.05]]", index)
         self.assertIn("NJ:[[38.93,-75.56],[41.36,-73.89]]", index)
+        self.assertIn("NY:[[40.50,-79.76],[45.02,-71.86]]", index)
+        self.assertIn("CT:[[40.95,-73.73],[42.05,-71.79]]", index)
+        self.assertIn("RI:[[41.15,-71.86],[42.02,-71.12]]", index)
+        self.assertIn("MA:[[41.24,-73.51],[42.89,-69.93]]", index)
+        self.assertIn("VT:[[42.73,-73.44],[45.02,-71.46]]", index)
+        self.assertIn("NH:[[42.70,-72.56],[45.31,-70.61]]", index)
+        self.assertIn("ME:[[42.98,-71.08],[47.46,-66.95]]", index)
+        self.assertIn("ND:[[45.93,-104.05],[49.00,-96.55]]", index)
+        self.assertIn("SD:[[42.48,-104.06],[45.95,-96.44]]", index)
+        self.assertIn("NE:[[40.00,-104.05],[43.00,-95.31]]", index)
+        self.assertIn("KS:[[36.99,-102.05],[40.00,-94.59]]", index)
+        self.assertIn("MT:[[44.36,-116.05],[49.00,-104.04]]", index)
+        self.assertIn("WY:[[41.00,-111.06],[45.01,-104.05]]", index)
+        self.assertIn("CO:[[36.99,-109.06],[41.00,-102.04]]", index)
+        self.assertIn("ID:[[41.99,-117.24],[49.00,-111.04]]", index)
+        self.assertIn("UT:[[37.00,-114.05],[42.00,-109.04]]", index)
+        self.assertIn("AZ:[[31.33,-114.82],[37.00,-109.05]]", index)
+        self.assertIn("NM:[[31.33,-109.05],[37.00,-103.00]]", index)
+        self.assertIn("NV:[[35.00,-120.01],[42.00,-114.04]]", index)
+        self.assertIn("CA:[[32.53,-124.41],[42.01,-114.13]]", index)
+        self.assertIn("OR:[[41.99,-124.57],[46.29,-116.46]]", index)
+        self.assertIn("WA:[[45.54,-124.76],[49.00,-116.92]]", index)
+        self.assertIn("AK:[[51.21,-179.15],[71.39,-129.98]]", index)
+        self.assertIn("HI:[[18.91,-160.25],[22.24,-154.81]]", index)
         self.assertNotIn("const FL=", index)
         self.assertNotIn("viewbox=-87.7,31.1,-79.8,24.4", index)
         self.assertNotIn("Florida and Georgia</title>", index)
@@ -146,12 +243,14 @@ class SoutheastPageTests(unittest.TestCase):
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")
         self.assertIn(
-            "<title>Church of God Directory — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic</title>",
+            "<title>Church of God Directory — Florida, the Southeast, South-Central, the Upper South, the Midwest, the Mid-Atlantic, the Northeast, northern New England, the Plains, the Mountain West, the Southwest, and the Pacific</title>",
             directory,
         )
-        self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic", directory)
-        self.assertIn("first.state==='LA'?'Parish':'County'", directory)
-        self.assertIn("/ city$/.test(first.county||'')", directory)
+        self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, the Upper South, the Midwest, the Mid-Atlantic, the Northeast, northern New England, the Plains, the Mountain West, the Southwest, and the Pacific", directory)
+        self.assertIn("state==='LA'?'Parish':'County'", directory)
+        self.assertIn("function countyKind", directory)
+        self.assertIn("City and Borough|Census Area|Municipality|Borough|Parish|County", directory)
+        self.assertIn("/ city$/.test(name)", directory)
         self.assertNotIn("/ city$/i", directory)
         self.assertIn("All parishes", directory)
         self.assertIn("All counties", directory)
@@ -173,14 +272,27 @@ class SoutheastPageTests(unittest.TestCase):
 
     def test_monthly_job_refreshes_every_published_state(self):
         workflow = (ROOT / ".github/workflows/refresh.yml").read_text(encoding="utf-8")
-        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ", workflow)
+        self.assertIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI", workflow)
         self.assertIn("timeout-minutes: 90", workflow)
+        self.assertIn("issues: write", workflow)
+        self.assertIn("continue-on-error: true", workflow)
+        self.assertNotIn("if: success()", workflow)
+        self.assertIn("::warning::Held", workflow)
+        self.assertIn("GITHUB_STEP_SUMMARY", workflow)
+        self.assertIn('Monthly refresh held states', workflow)
+        self.assertIn("gh issue create --title", workflow)
+        self.assertIn("gh issue comment", workflow)
         self.assertNotIn("python scripts/refresh.py FL\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX\n", workflow)
         self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO\n", workflow)
+        self.assertNotIn("python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ\n", workflow)
         self.assertIn(
+            "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, New Jersey, New York, Connecticut, Rhode Island, Massachusetts, Vermont, New Hampshire, Maine, North Dakota, South Dakota, Nebraska, Kansas, Montana, Wyoming, Colorado, Idaho, Utah, Arizona, New Mexico, Nevada, California, Oregon, Washington, Alaska, and Hawaii church directory",
+            workflow,
+        )
+        self.assertNotIn(
             "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, and New Jersey church directory",
             workflow,
         )
@@ -227,6 +339,39 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["MD"], 110)
         self.assertGreaterEqual(self.counts["DE"], 20)
         self.assertGreaterEqual(self.counts["NJ"], 90)
+        # Locator binding for NE-1 is NY 236, CT 72, RI 22, MA 70.
+        # Floors sit a little under that so a few-record drift still passes.
+        self.assertGreaterEqual(self.counts["NY"], 220)
+        self.assertGreaterEqual(self.counts["CT"], 65)
+        self.assertGreaterEqual(self.counts["RI"], 20)
+        self.assertGreaterEqual(self.counts["MA"], 65)
+        # Locator binding for NE-2 is VT 1, NH 6, ME 25.
+        # Floors sit under the locator total. They are not an exact count.
+        self.assertGreaterEqual(self.counts["VT"], 1)
+        self.assertGreaterEqual(self.counts["NH"], 1)
+        self.assertGreaterEqual(self.counts["ME"], 22)
+        # Locator binding for PL-1 is ND 12, SD 9, NE 12, KS 21.
+        self.assertGreaterEqual(self.counts["ND"], 1)
+        self.assertGreaterEqual(self.counts["SD"], 1)
+        self.assertGreaterEqual(self.counts["NE"], 1)
+        self.assertGreaterEqual(self.counts["KS"], 18)
+        # Locator binding for MT-1 is MT 6, WY 1, CO 31, ID 13, UT 14.
+        self.assertGreaterEqual(self.counts["MT"], 1)
+        self.assertGreaterEqual(self.counts["WY"], 1)
+        self.assertGreaterEqual(self.counts["CO"], 28)
+        self.assertGreaterEqual(self.counts["ID"], 1)
+        self.assertGreaterEqual(self.counts["UT"], 1)
+        # Locator binding for SW-1 is AZ 77, NM 53, NV 13.
+        self.assertGreaterEqual(self.counts["AZ"], 70)
+        self.assertGreaterEqual(self.counts["NM"], 48)
+        self.assertGreaterEqual(self.counts["NV"], 1)
+        # Locator binding for PC-1 is CA 261, OR 35, WA 44, AK 21, HI 21.
+        # Floors sit a little under that so a few-record drift still passes.
+        self.assertGreaterEqual(self.counts["CA"], 240)
+        self.assertGreaterEqual(self.counts["OR"], 30)
+        self.assertGreaterEqual(self.counts["WA"], 40)
+        self.assertGreaterEqual(self.counts["AK"], 18)
+        self.assertGreaterEqual(self.counts["HI"], 18)
         self.assertGreaterEqual(len(self.churches), 4600)
         refresh.require_complete_download(list(PUBLISHED), self.churches)
 

@@ -48,15 +48,21 @@ ARCGIS_STREET_TYPES = frozenset(
     {"PointAddress", "StreetAddress", "StreetAddressExt", "Subaddress", "StreetInt"}
 )
 CENSUS_BATCH_URL = "https://geocoding.geo.census.gov/geocoder/geographies/addressbatch"
+HELD_STATES_PATH = ROOT / "held-states.json"
+HELD_STATES: list[dict[str, int | str]] = []
+# The current Census vintage replaced Connecticut's eight counties with
+# planning regions. The 2020 vintage still returns Fairfield, Hartford, and
+# the other legacy names already stored on the Connecticut rows.
+CONNECTICUT_FIPS = "09"
 GEONAMES_URL = "https://download.geonames.org/export/zip/US.zip"
 USER_AGENT = "cog-locations-refresh/1.0 (+https://78tacos.github.io/cog-locations/)"
 REQUEST_INTERVAL_SECONDS = 3
 MIN_STATEWIDE = 100
-# A requested state under this is not taken from the fresh scrape. Rows already
-# published for that state are kept. A state with no saved rows is logged and
-# left out. The combined floor (MIN_STATEWIDE) still refuses a bad run.
-# 15 is above a one-page locator response (about 10) and matches Iowa, the
-# smallest published state.
+# Under this count, a never-published state with at least one church is
+# published. A published state keeps its saved rows only when the fresh count
+# is 0 or smaller than the saved count. The combined floor (MIN_STATEWIDE)
+# still refuses a bad run. 15 matches Iowa, the smallest previously published
+# state.
 MIN_PER_STATE = 15
 DEFAULT_STATES = ("FL",)
 NATIONAL_COUNTY_PATH = Path(__file__).with_name("national_county.txt")
@@ -335,6 +341,18 @@ def has_pin(church: dict) -> bool:
 CENSUS_COORDS_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
 
 
+def census_benchmark(state_fips: set[str] | frozenset[str] | None) -> tuple[str, str]:
+    """Return the Census benchmark and vintage for a state-FIPS allow-list.
+
+    Connecticut uses the 2020 county geography. Every other state stays on the
+    current vintage.
+    """
+    codes = {str(code).strip().zfill(2) for code in state_fips} if state_fips else set()
+    if codes == {CONNECTICUT_FIPS}:
+        return "Public_AR_Census2020", "Census2020_Census2020"
+    return "Public_AR_Current", "Current_Current"
+
+
 def county_for_point(
     lat: float,
     lng: float,
@@ -347,12 +365,13 @@ def county_for_point(
     """
     if allowed_state_fips is None:
         allowed_state_fips = FLORIDA_STATE_FIPS
+    benchmark, vintage = census_benchmark(allowed_state_fips)
     params = urllib.parse.urlencode(
         {
             "x": lng,
             "y": lat,
-            "benchmark": "Public_AR_Current",
-            "vintage": "Current_Current",
+            "benchmark": benchmark,
+            "vintage": vintage,
             "layers": "Counties",
             "format": "json",
         }
@@ -494,11 +513,12 @@ def _pick(points: list[tuple[float, float, str]]) -> tuple[float, float, str] | 
 
 def census_oneline(church: dict, street: str) -> tuple[float, float, str] | None:
     query = f"{street}, {clean_city(church['city'])}, {church['state']} {church['zip']}"
+    benchmark, vintage = census_benchmark(allowed_fips_for_church(church))
     params = urllib.parse.urlencode(
         {
             "address": query,
-            "benchmark": "Public_AR_Current",
-            "vintage": "Current_Current",
+            "benchmark": benchmark,
+            "vintage": vintage,
             "format": "json",
         }
     )
@@ -604,15 +624,31 @@ def fallback_geocode(church: dict, sleep=time.sleep) -> tuple[float, float, str,
                 hit = None
             sleep(pause)
             if hit is not None:
-                return hit[0], hit[1], hit[2], source, False
+                lat, lng, county = hit
+                return lat, lng, _fallback_county(church, lat, lng, county), source, False
     if ambiguous:
         spread = max(_distance_m(a[:2], b[:2]) for a in ambiguous for b in ambiguous)
         if spread <= NEIGHBORHOOD_METERS:
             lat = sum(point[0] for point in ambiguous) / len(ambiguous)
             lng = sum(point[1] for point in ambiguous) / len(ambiguous)
             county = next((point[2] for point in ambiguous if point[2]), "")
-            return lat, lng, county, "ambiguous-street", True
+            return lat, lng, _fallback_county(church, lat, lng, county), "ambiguous-street", True
     return None
+
+
+def _fallback_county(church: dict, lat: float, lng: float, county: str) -> str:
+    """Keep a fallback pin, but take Connecticut's county from the 2020 vintage.
+
+    Nominatim and ArcGIS can name a Connecticut planning region. county_for_point
+    already asks Census for the legacy county.
+    """
+    if allowed_fips_for_church(church) != frozenset({CONNECTICUT_FIPS}):
+        return county
+    try:
+        return county_for_point(lat, lng, allowed_fips_for_church(church)) or ""
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as error:
+        print(f"  county lookup failed for {church['name']}: {error}", file=sys.stderr)
+        return ""
 
 
 def resolve_locations(
@@ -921,7 +957,11 @@ def dedupe(churches: list[dict]) -> list[dict]:
     return unique
 
 
-def _post_census(churches: list[dict]) -> str:
+def _post_census(
+    churches: list[dict],
+    benchmark: str = "Public_AR_Current",
+    vintage: str = "Current_Current",
+) -> str:
     boundary = "----tampaChurchesBoundary7f3a"
     payload = census_csv(churches)
     body = b"".join(
@@ -929,10 +969,10 @@ def _post_census(churches: list[dict]) -> str:
             (
                 f"--{boundary}\r\n"
                 'Content-Disposition: form-data; name="benchmark"\r\n\r\n'
-                "Public_AR_Current\r\n"
+                f"{benchmark}\r\n"
                 f"--{boundary}\r\n"
                 'Content-Disposition: form-data; name="vintage"\r\n\r\n'
-                "Current_Current\r\n"
+                f"{vintage}\r\n"
                 f"--{boundary}\r\n"
                 'Content-Disposition: form-data; name="addressFile"; filename="addresses.csv"\r\n'
                 "Content-Type: text/csv\r\n\r\n"
@@ -986,7 +1026,8 @@ def geocode_addresses(
             if start:
                 sleep(REQUEST_INTERVAL_SECONDS)
             chunk = group[start : start + chunk_size]
-            parsed = parse_census_batch(_post_census(chunk), own)
+            benchmark, vintage = census_benchmark(own)
+            parsed = parse_census_batch(_post_census(chunk, benchmark, vintage), own)
             for index, church in enumerate(chunk, start=1):
                 hit = parsed.get(str(index))
                 if hit is not None:
@@ -1088,11 +1129,19 @@ def _state_code(church: dict) -> str:
 
 
 def keep_published_rows(states: list[str], churches: list[dict], existing: list[dict]) -> list[dict]:
-    """Keep saved rows when a requested state's scrape is under MIN_PER_STATE.
+    """Keep saved rows only when a short scrape is empty or smaller than the saved set.
 
-    Fresh rows for that state are dropped. Previously published rows are kept.
-    The log line names the state, the fresh count, and the kept count. A state
-    with no saved rows is logged and contributes nothing.
+    A state at or above MIN_PER_STATE keeps the fresh rows. Under that count:
+
+    - No saved rows and at least one fresh row: publish the fresh rows.
+    - No saved rows and a fresh count of 0: log it and contribute nothing.
+    - Saved rows, and the fresh count is 0 or lower than the saved count: keep
+      the saved rows. The log names the state, the fresh count, and the kept count.
+    - Saved rows, and the fresh count is at least 1 and at least the saved count:
+      publish the fresh rows.
+
+    There is no ratio check. A shorter non-empty scrape does not replace a
+    larger published set, and a longer one does.
     """
     fresh_counts: dict[str, int] = defaultdict(int)
     for church in churches:
@@ -1104,19 +1153,36 @@ def keep_published_rows(states: list[str], churches: list[dict], existing: list[
         code = _state_code(church)
         if code:
             saved[code].append(church)
-    short = [state for state in states if fresh_counts.get(state, 0) < MIN_PER_STATE]
-    if not short:
+    hold: list[str] = []
+    held_rows = []
+    for state in states:
+        fresh_count = fresh_counts.get(state, 0)
+        if fresh_count >= MIN_PER_STATE:
+            continue
+        prior = saved.get(state, [])
+        if prior:
+            if fresh_count < len(prior):
+                hold.append(state)
+                held_rows.append({"state": state, "saved": len(prior), "fresh": fresh_count})
+            continue
+        if fresh_count == 0:
+            hold.append(state)
+    # Replaced on every call so a later scrape that holds nothing does not
+    # keep the previous report.
+    global HELD_STATES
+    HELD_STATES = held_rows
+    if not hold:
         return churches
-    short_set = set(short)
-    for state in short:
+    for state in hold:
         prior = saved.get(state, [])
         print(
             f"Keeping published {state} rows: fresh {fresh_counts.get(state, 0)}, kept {len(prior)}",
             file=sys.stderr,
             flush=True,
         )
-    kept = [church for church in churches if _state_code(church) not in short_set]
-    for state in short:
+    held = set(hold)
+    kept = [church for church in churches if _state_code(church) not in held]
+    for state in hold:
         kept.extend(saved.get(state, []))
     return kept
 
@@ -1168,6 +1234,10 @@ def main(argv: list[str] | None = None) -> None:
     parsed = dedupe(fetch_states(REQUEST_INTERVAL_SECONDS, states))
     print(f"Parsed {len(parsed)} {label} churches", flush=True)
     parsed = keep_published_rows(states, parsed, existing)
+    if HELD_STATES:
+        HELD_STATES_PATH.write_text(json.dumps(HELD_STATES), encoding="utf-8")
+    elif HELD_STATES_PATH.exists():
+        HELD_STATES_PATH.unlink()
     require_complete_download(states, parsed)
 
     cached = {

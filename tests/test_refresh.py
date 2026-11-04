@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_page.html"
-JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, and the Mid-Atlantic
+JOSEPH_README = """# Church of God Map — Florida, the Southeast, South-Central, the Upper South, the Midwest, the Mid-Atlantic, the Northeast, northern New England, the Plains, the Mountain West, the Southwest, and the Pacific
 
 A project I made because the official Church of God website is really not great when trying to find a location.
 
@@ -240,6 +240,30 @@ class DirectoryRuleTests(unittest.TestCase):
             "MD": set(refresh.COUNTY_FIPS_BY_STATE["24"].values()),
             "DE": set(refresh.COUNTY_FIPS_BY_STATE["10"].values()),
             "NJ": set(refresh.COUNTY_FIPS_BY_STATE["34"].values()),
+            "NY": set(refresh.COUNTY_FIPS_BY_STATE["36"].values()),
+            "CT": set(refresh.COUNTY_FIPS_BY_STATE["09"].values()),
+            "RI": set(refresh.COUNTY_FIPS_BY_STATE["44"].values()),
+            "MA": set(refresh.COUNTY_FIPS_BY_STATE["25"].values()),
+            "ME": set(refresh.COUNTY_FIPS_BY_STATE["23"].values()),
+            "KS": set(refresh.COUNTY_FIPS_BY_STATE["20"].values()),
+            "CO": set(refresh.COUNTY_FIPS_BY_STATE["08"].values()),
+            "AZ": set(refresh.COUNTY_FIPS_BY_STATE["04"].values()),
+            "NM": set(refresh.COUNTY_FIPS_BY_STATE["35"].values()),
+            "CA": set(refresh.COUNTY_FIPS_BY_STATE["06"].values()),
+            "OR": set(refresh.COUNTY_FIPS_BY_STATE["41"].values()),
+            "WA": set(refresh.COUNTY_FIPS_BY_STATE["53"].values()),
+            "AK": set(refresh.COUNTY_FIPS_BY_STATE["02"].values()),
+            "HI": set(refresh.COUNTY_FIPS_BY_STATE["15"].values()),
+            "VT": set(refresh.COUNTY_FIPS_BY_STATE["50"].values()),
+            "NH": set(refresh.COUNTY_FIPS_BY_STATE["33"].values()),
+            "ND": set(refresh.COUNTY_FIPS_BY_STATE["38"].values()),
+            "SD": set(refresh.COUNTY_FIPS_BY_STATE["46"].values()),
+            "NE": set(refresh.COUNTY_FIPS_BY_STATE["31"].values()),
+            "MT": set(refresh.COUNTY_FIPS_BY_STATE["30"].values()),
+            "WY": set(refresh.COUNTY_FIPS_BY_STATE["56"].values()),
+            "ID": set(refresh.COUNTY_FIPS_BY_STATE["16"].values()),
+            "UT": set(refresh.COUNTY_FIPS_BY_STATE["49"].values()),
+            "NV": set(refresh.COUNTY_FIPS_BY_STATE["32"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -376,7 +400,7 @@ class FormatTests(unittest.TestCase):
         )
         allow_lists: list[set[str]] = []
 
-        def fake_post(churches):
+        def fake_post(churches, benchmark="Public_AR_Current", vintage="Current_Current"):
             rows = []
             for index, _church_row in enumerate(churches, start=1):
                 rows.append(
@@ -461,14 +485,15 @@ class FormatTests(unittest.TestCase):
             text,
         )
         self.assertIn(
-            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), and the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey).",
+            "The published directory now includes Florida, the Southeast states (Georgia, Alabama, South Carolina, North Carolina, Tennessee, and Mississippi), the South-Central states (Louisiana, Arkansas, Oklahoma, and Texas), the Upper South states (Virginia, West Virginia, and Kentucky), the Midwest states (Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, and Missouri), the Mid-Atlantic states (Pennsylvania, Maryland, Delaware, and New Jersey), the Northeast states (New York, Connecticut, Rhode Island, and Massachusetts), the northern New England states (Vermont, New Hampshire, and Maine), the Plains states (North Dakota, South Dakota, Nebraska, and Kansas), the Mountain states (Montana, Wyoming, Colorado, Idaho, and Utah), the Southwest states (Arizona, New Mexico, and Nevada), and the Pacific states (California, Oregon, Washington, Alaska, and Hawaii).",
             text,
         )
-        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ` rebuilds it.", text)
+        self.assertIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI` rebuilds it.", text)
         self.assertIn(
-            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ\n```",
+            "```bash\npython3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI\n```",
             text,
         )
+        self.assertNotIn("`python3 scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ`", text)
         self.assertNotIn("```bash\npython3 scripts/refresh.py\n```", text)
         self.assertIn("https://78tacos.github.io/cog-locations/", text)
         self.assertNotIn("stay Florida-only", text)
@@ -560,6 +585,23 @@ class FallbackGeocodeTests(unittest.TestCase):
 
     def test_city_spelling_fixed(self):
         self.assertEqual(refresh.clean_city("Brandenton"), "Bradenton")
+
+    def test_connecticut_fallback_keeps_the_pin_and_uses_the_legacy_county(self):
+        church = _church(state="CT", city="Norwalk", zip="06856", address1="10 Main Street")
+        seen: list[tuple[float, float, set[str]]] = []
+
+        def lookup(lat, lng, allowed):
+            seen.append((lat, lng, set(allowed)))
+            return "Fairfield"
+
+        original = refresh.county_for_point
+        refresh.county_for_point = lookup
+        try:
+            hit = self._run(church, census=None, nominatim=(41.12, -73.41, "Western Connecticut"))
+        finally:
+            refresh.county_for_point = original
+        self.assertEqual(hit, (41.12, -73.41, "Fairfield", "nominatim", False))
+        self.assertEqual(seen, [(41.12, -73.41, {"09"})])
 
     def test_first_exact_match_wins(self):
         hit = self._run(_church(), census=None, nominatim=(27.0, -82.0, "Pasco"), arcgis=(1.0, 1.0, "X"))
@@ -742,6 +784,25 @@ class CensusStateFilterTests(unittest.TestCase):
             }
         }
         return json.dumps(payload).encode()
+
+    def test_connecticut_point_lookup_uses_the_2020_counties(self):
+        urls: list[str] = []
+
+        def fake(url, **kwargs):
+            urls.append(url)
+            return self._response([{"STATE": "09", "COUNTY": "001"}])
+
+        original = refresh.request_bytes
+        refresh.request_bytes = fake
+        try:
+            county = refresh.county_for_point(41.1112, -73.4204, refresh.state_fips_for(["CT"]))
+        finally:
+            refresh.request_bytes = original
+        self.assertEqual(county, "Fairfield")
+        self.assertEqual(refresh.county_from_fips("09", "009"), "New Haven")
+        self.assertIn("benchmark=Public_AR_Census2020", urls[0])
+        self.assertIn("vintage=Census2020_Census2020", urls[0])
+        self.assertEqual(refresh.census_benchmark(refresh.state_fips_for(["FL"])), ("Public_AR_Current", "Current_Current"))
 
     def test_point_lookup_skips_other_states_unless_asked(self):
         raw = self._response(
@@ -947,6 +1008,79 @@ class MultiStateCliTests(unittest.TestCase):
         self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
         self.assertEqual(len(merged), len({church["name"] for church in merged}))
 
+    def test_published_five_fresh_seven_publishes_seven(self):
+        saved = self._published_texas(5)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 8)
+        ]
+        merged = refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in fresh])
+
+    def test_published_five_fresh_three_keeps_five(self):
+        saved = self._published_texas(5)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 4)
+        ]
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertIn("fresh 3", stderr.getvalue())
+        self.assertIn("kept 5", stderr.getvalue())
+
+    def test_published_five_fresh_zero_keeps_five(self):
+        saved = self._published_texas(5)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["TX"], [], saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertIn("fresh 0", stderr.getvalue())
+        self.assertIn("kept 5", stderr.getvalue())
+
+    def test_published_forty_fresh_ten_keeps_forty(self):
+        saved = self._published_texas(40)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 11)
+        ]
+        self.assertLess(len(fresh), refresh.MIN_PER_STATE)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertIn("fresh 10", stderr.getvalue())
+        self.assertIn("kept 40", stderr.getvalue())
+
+    def test_never_published_fresh_four_publishes_four(self):
+        fresh = [
+            _church(name=f"WY {i}", state="WY", city="Cheyenne", address1=f"{i} Capitol Ave", zip="82001")
+            for i in range(1, 5)
+        ]
+        self.assertLess(len(fresh), refresh.MIN_PER_STATE)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["WY"], fresh, [])
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in fresh])
+        self.assertNotIn("kept 0", stderr.getvalue())
+        self.assertEqual(refresh.HELD_STATES, [])
+
+    def test_held_state_is_recorded(self):
+        saved = self._published_texas(5)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 4)
+        ]
+        refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual(refresh.HELD_STATES, [{"state": "TX", "saved": 5, "fresh": 3}])
+        longer = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 8)
+        ]
+        refresh.keep_published_rows(["TX"], longer, saved)
+        self.assertEqual(refresh.HELD_STATES, [])
+
     def test_new_state_returning_zero_is_logged_and_does_not_fail(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
         self.assertGreaterEqual(len(florida), refresh.MIN_STATEWIDE)
@@ -987,7 +1121,8 @@ class MultiStateCliTests(unittest.TestCase):
         refresh.require_complete_download(["FL", "TX"], florida + texas)
 
     def test_main_does_not_write_a_short_download(self):
-        # Wyoming is not published, so a short scrape has no rows to keep.
+        # A never-published state keeps a non-empty short scrape. Ten churches
+        # still miss the combined floor, so nothing is written.
         wyoming = [
             _church(name=f"WY {i}", state="WY", city="Cheyenne", address1=f"{i} Capitol Ave", zip="82001")
             for i in range(1, 11)
@@ -1009,7 +1144,7 @@ class MultiStateCliTests(unittest.TestCase):
             refresh.fetch_states = original_fetch
             refresh.geocode_addresses = original_geocode
             refresh.write_outputs = original_write
-        self.assertIn("Parsed only 0 churches", str(caught.exception))
+        self.assertIn("Parsed only 10 churches", str(caught.exception))
 
     def test_main_writes_kept_rows_for_a_short_published_state(self):
         fresh_iowa = [
@@ -1049,6 +1184,8 @@ class MultiStateCliTests(unittest.TestCase):
             refresh.fallback_geocode = original_fallback
             refresh.load_postal_centroids = original_centroids
             refresh.write_outputs = original_write
+            if refresh.HELD_STATES_PATH.exists():
+                refresh.HELD_STATES_PATH.unlink()
         self.assertEqual(len(written), 1)
         got = [church for church in written[0] if church["state"] == "IA"]
         self.assertEqual(got, saved_iowa)

@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   refresh:
@@ -23,7 +24,44 @@ jobs:
 
       - name: Refresh church data
         # A shorter state list would rewrite churches.json and drop published states.
-        run: python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ
+        run: python scripts/refresh.py FL GA AL SC NC TN MS LA AR OK TX VA WV KY OH IN IL MI WI MN IA MO PA MD DE NJ NY CT RI MA VT NH ME ND SD NE KS MT WY CO ID UT AZ NM NV CA OR WA AK HI
+
+      - name: Report held states
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ ! -s held-states.json ]; then
+            exit 0
+          fi
+          python3 - << 'PY'
+          import json
+          import os
+
+          rows = json.load(open("held-states.json", encoding="utf-8"))
+          lines = []
+          for row in rows:
+              state = row["state"]
+              fresh = row["fresh"]
+              saved = row["saved"]
+              print(f"::warning::Held {state}: fresh {fresh}, saved {saved}")
+              lines.append(f"- {state}: fresh {fresh}, saved {saved}")
+          run_url = os.environ["RUN_URL"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write("### Monthly refresh held states\n\n")
+              handle.write("\n".join(lines) + "\n\n")
+              handle.write(f"Run: {run_url}\n")
+          body = "Monthly refresh held states\n\n" + "\n".join(lines) + f"\n\nRun: {run_url}\n"
+          open("held-states-body.md", "w", encoding="utf-8").write(body)
+          PY
+          number=$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title=="Monthly refresh held states") | .number' | head -n 1)
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file held-states-body.md
+          else
+            gh issue create --title "Monthly refresh held states" --body-file held-states-body.md
+          fi
+          rm -f held-states-body.md
 
       - name: Commit to main when the data changed
         run: |
@@ -34,5 +72,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- churches.json churches.js
-          git commit -m "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, and New Jersey church directory"
+          git commit -m "Refresh Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, New Jersey, New York, Connecticut, Rhode Island, Massachusetts, Vermont, New Hampshire, Maine, North Dakota, South Dakota, Nebraska, Kansas, Montana, Wyoming, Colorado, Idaho, Utah, Arizona, New Mexico, Nevada, California, Oregon, Washington, Alaska, and Hawaii church directory"
           git push origin HEAD:main
