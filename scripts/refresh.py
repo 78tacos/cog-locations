@@ -1088,11 +1088,19 @@ def _state_code(church: dict) -> str:
 
 
 def keep_published_rows(states: list[str], churches: list[dict], existing: list[dict]) -> list[dict]:
-    """Keep saved rows when a requested state's scrape is under MIN_PER_STATE.
+    """Keep saved rows only when a short scrape is empty or smaller than the saved set.
 
-    Fresh rows for that state are dropped. Previously published rows are kept.
-    The log line names the state, the fresh count, and the kept count. A state
-    with no saved rows is logged and contributes nothing.
+    A state at or above MIN_PER_STATE keeps the fresh rows. Under that count:
+
+    - No saved rows and at least one fresh row: publish the fresh rows.
+    - No saved rows and a fresh count of 0: log it and contribute nothing.
+    - Saved rows, and the fresh count is 0 or lower than the saved count: keep
+      the saved rows. The log names the state, the fresh count, and the kept count.
+    - Saved rows, and the fresh count is at least 1 and at least the saved count:
+      publish the fresh rows.
+
+    There is no ratio check. A shorter non-empty scrape does not replace a
+    larger published set, and a longer one does.
     """
     fresh_counts: dict[str, int] = defaultdict(int)
     for church in churches:
@@ -1104,19 +1112,30 @@ def keep_published_rows(states: list[str], churches: list[dict], existing: list[
         code = _state_code(church)
         if code:
             saved[code].append(church)
-    short = [state for state in states if fresh_counts.get(state, 0) < MIN_PER_STATE]
-    if not short:
+    hold: list[str] = []
+    for state in states:
+        fresh_count = fresh_counts.get(state, 0)
+        if fresh_count >= MIN_PER_STATE:
+            continue
+        prior = saved.get(state, [])
+        if prior:
+            if fresh_count == 0 or fresh_count < len(prior):
+                hold.append(state)
+            continue
+        if fresh_count == 0:
+            hold.append(state)
+    if not hold:
         return churches
-    short_set = set(short)
-    for state in short:
+    for state in hold:
         prior = saved.get(state, [])
         print(
             f"Keeping published {state} rows: fresh {fresh_counts.get(state, 0)}, kept {len(prior)}",
             file=sys.stderr,
             flush=True,
         )
-    kept = [church for church in churches if _state_code(church) not in short_set]
-    for state in short:
+    held = set(hold)
+    kept = [church for church in churches if _state_code(church) not in held]
+    for state in hold:
         kept.extend(saved.get(state, []))
     return kept
 

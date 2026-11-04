@@ -254,6 +254,16 @@ class DirectoryRuleTests(unittest.TestCase):
             "WA": set(refresh.COUNTY_FIPS_BY_STATE["53"].values()),
             "AK": set(refresh.COUNTY_FIPS_BY_STATE["02"].values()),
             "HI": set(refresh.COUNTY_FIPS_BY_STATE["15"].values()),
+            "VT": set(refresh.COUNTY_FIPS_BY_STATE["50"].values()),
+            "NH": set(refresh.COUNTY_FIPS_BY_STATE["33"].values()),
+            "ND": set(refresh.COUNTY_FIPS_BY_STATE["38"].values()),
+            "SD": set(refresh.COUNTY_FIPS_BY_STATE["46"].values()),
+            "NE": set(refresh.COUNTY_FIPS_BY_STATE["31"].values()),
+            "MT": set(refresh.COUNTY_FIPS_BY_STATE["30"].values()),
+            "WY": set(refresh.COUNTY_FIPS_BY_STATE["56"].values()),
+            "ID": set(refresh.COUNTY_FIPS_BY_STATE["16"].values()),
+            "UT": set(refresh.COUNTY_FIPS_BY_STATE["49"].values()),
+            "NV": set(refresh.COUNTY_FIPS_BY_STATE["32"].values()),
         }
         for church in churches:
             self.assertEqual(refresh.city_group_for(church["city"]), church["city_group"])
@@ -962,6 +972,63 @@ class MultiStateCliTests(unittest.TestCase):
         self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
         self.assertEqual(len(merged), len({church["name"] for church in merged}))
 
+    def test_published_five_fresh_seven_publishes_seven(self):
+        saved = self._published_texas(5)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 8)
+        ]
+        merged = refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in fresh])
+
+    def test_published_five_fresh_three_keeps_five(self):
+        saved = self._published_texas(5)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 4)
+        ]
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertIn("fresh 3", stderr.getvalue())
+        self.assertIn("kept 5", stderr.getvalue())
+
+    def test_published_five_fresh_zero_keeps_five(self):
+        saved = self._published_texas(5)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["TX"], [], saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertIn("fresh 0", stderr.getvalue())
+        self.assertIn("kept 5", stderr.getvalue())
+
+    def test_published_forty_fresh_ten_keeps_forty(self):
+        saved = self._published_texas(40)
+        fresh = [
+            _church(name=f"Fresh TX {i}", state="TX", city="Houston", address1=f"{i} Fresh Ave", zip="77002")
+            for i in range(1, 11)
+        ]
+        self.assertLess(len(fresh), refresh.MIN_PER_STATE)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["TX"], fresh, saved)
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in saved])
+        self.assertIn("fresh 10", stderr.getvalue())
+        self.assertIn("kept 40", stderr.getvalue())
+
+    def test_never_published_fresh_four_publishes_four(self):
+        fresh = [
+            _church(name=f"WY {i}", state="WY", city="Cheyenne", address1=f"{i} Capitol Ave", zip="82001")
+            for i in range(1, 5)
+        ]
+        self.assertLess(len(fresh), refresh.MIN_PER_STATE)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            merged = refresh.keep_published_rows(["WY"], fresh, [])
+        self.assertEqual([church["name"] for church in merged], [church["name"] for church in fresh])
+        self.assertNotIn("kept 0", stderr.getvalue())
+
     def test_new_state_returning_zero_is_logged_and_does_not_fail(self):
         florida = [_church(name=f"FL {i}", address1=f"{i} Main Street") for i in range(1, 201)]
         self.assertGreaterEqual(len(florida), refresh.MIN_STATEWIDE)
@@ -1002,7 +1069,8 @@ class MultiStateCliTests(unittest.TestCase):
         refresh.require_complete_download(["FL", "TX"], florida + texas)
 
     def test_main_does_not_write_a_short_download(self):
-        # Wyoming is not published, so a short scrape has no rows to keep.
+        # A never-published state keeps a non-empty short scrape. Ten churches
+        # still miss the combined floor, so nothing is written.
         wyoming = [
             _church(name=f"WY {i}", state="WY", city="Cheyenne", address1=f"{i} Capitol Ave", zip="82001")
             for i in range(1, 11)
@@ -1024,7 +1092,7 @@ class MultiStateCliTests(unittest.TestCase):
             refresh.fetch_states = original_fetch
             refresh.geocode_addresses = original_geocode
             refresh.write_outputs = original_write
-        self.assertIn("Parsed only 0 churches", str(caught.exception))
+        self.assertIn("Parsed only 10 churches", str(caught.exception))
 
     def test_main_writes_kept_rows_for_a_short_published_state(self):
         fresh_iowa = [

@@ -10,9 +10,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import refresh
 
 PUBLISHED = ("FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "AR", "OK", "TX", "VA", "WV", "KY", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "PA", "MD", "DE", "NJ", "NY", "CT", "RI", "MA", "VT", "NH", "ME", "ND", "SD", "NE", "KS", "MT", "WY", "CO", "ID", "UT", "AZ", "NM", "NV", "CA", "OR", "WA", "AK", "HI")
-# Locator totals under MIN_PER_STATE with no previously published rows.
-# keep_published_rows logs them and the directory file omits them.
-OMITTED = ("VT", "NH", "ND", "SD", "NE", "MT", "WY", "ID", "UT", "NV")
 STATE_FIPS = {
     "FL": "12",
     "GA": "13",
@@ -250,8 +247,10 @@ class SoutheastPageTests(unittest.TestCase):
             directory,
         )
         self.assertIn("Church of God Directory — Florida, the Southeast, South-Central, the Upper South, the Midwest, the Mid-Atlantic, the Northeast, northern New England, the Plains, the Mountain West, the Southwest, and the Pacific", directory)
-        self.assertIn("first.state==='LA'?'Parish':'County'", directory)
-        self.assertIn("/ city$/.test(first.county||'')", directory)
+        self.assertIn("state==='LA'?'Parish':'County'", directory)
+        self.assertIn("function countyKind", directory)
+        self.assertIn("City and Borough|Census Area|Municipality|Borough|Parish|County", directory)
+        self.assertIn("/ city$/.test(name)", directory)
         self.assertNotIn("/ city$/i", directory)
         self.assertIn("All parishes", directory)
         self.assertIn("All counties", directory)
@@ -298,7 +297,7 @@ class SoutheastDataTests(unittest.TestCase):
         cls.counts = Counter(church["state"] for church in cls.churches)
 
     def test_published_directory_keeps_florida_georgia_and_the_new_states(self):
-        self.assertEqual(set(self.counts), set(PUBLISHED) - set(OMITTED))
+        self.assertEqual(set(self.counts), set(PUBLISHED))
         self.assertGreaterEqual(self.counts["FL"], 100)
         self.assertGreaterEqual(self.counts["GA"], 100)
         for code in ("AL", "SC", "NC", "TN", "MS"):
@@ -339,28 +338,25 @@ class SoutheastDataTests(unittest.TestCase):
         self.assertGreaterEqual(self.counts["RI"], 20)
         self.assertGreaterEqual(self.counts["MA"], 65)
         # Locator binding for NE-2 is VT 1, NH 6, ME 25.
-        # VT and NH are under MIN_PER_STATE and were not published before, so the file keeps 0.
-        self.assertEqual(self.counts["VT"], 0)
-        self.assertEqual(self.counts["NH"], 0)
+        # Floors sit under the locator total. They are not an exact count.
+        self.assertGreaterEqual(self.counts["VT"], 1)
+        self.assertGreaterEqual(self.counts["NH"], 1)
         self.assertGreaterEqual(self.counts["ME"], 22)
         # Locator binding for PL-1 is ND 12, SD 9, NE 12, KS 21.
-        # ND, SD, and NE are under MIN_PER_STATE and were not published before, so the file keeps 0.
-        self.assertEqual(self.counts["ND"], 0)
-        self.assertEqual(self.counts["SD"], 0)
-        self.assertEqual(self.counts["NE"], 0)
+        self.assertGreaterEqual(self.counts["ND"], 1)
+        self.assertGreaterEqual(self.counts["SD"], 1)
+        self.assertGreaterEqual(self.counts["NE"], 1)
         self.assertGreaterEqual(self.counts["KS"], 18)
         # Locator binding for MT-1 is MT 6, WY 1, CO 31, ID 13, UT 14.
-        # MT, WY, ID, and UT are under MIN_PER_STATE and were not published before, so the file keeps 0.
-        self.assertEqual(self.counts["MT"], 0)
-        self.assertEqual(self.counts["WY"], 0)
+        self.assertGreaterEqual(self.counts["MT"], 1)
+        self.assertGreaterEqual(self.counts["WY"], 1)
         self.assertGreaterEqual(self.counts["CO"], 28)
-        self.assertEqual(self.counts["ID"], 0)
-        self.assertEqual(self.counts["UT"], 0)
+        self.assertGreaterEqual(self.counts["ID"], 1)
+        self.assertGreaterEqual(self.counts["UT"], 1)
         # Locator binding for SW-1 is AZ 77, NM 53, NV 13.
-        # NV is under MIN_PER_STATE and was not published before, so the file keeps 0.
         self.assertGreaterEqual(self.counts["AZ"], 70)
         self.assertGreaterEqual(self.counts["NM"], 48)
-        self.assertEqual(self.counts["NV"], 0)
+        self.assertGreaterEqual(self.counts["NV"], 1)
         # Locator binding for PC-1 is CA 261, OR 35, WA 44, AK 21, HI 21.
         # Floors sit a little under that so a few-record drift still passes.
         self.assertGreaterEqual(self.counts["CA"], 240)
