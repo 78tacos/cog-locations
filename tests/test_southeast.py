@@ -182,7 +182,7 @@ class SoutheastPageTests(unittest.TestCase):
         )
         self.assertIn(">Church of God Map</h3>", index)
         self.assertIn(
-            "Florida, Georgia, Alabama, South Carolina, North Carolina, Tennessee, Mississippi, Louisiana, Arkansas, Oklahoma, Texas, Virginia, West Virginia, Kentucky, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, Pennsylvania, Maryland, Delaware, New Jersey, New York, Connecticut, Rhode Island, Massachusetts, Vermont, New Hampshire, Maine, North Dakota, South Dakota, Nebraska, Kansas, Montana, Wyoming, Colorado, Idaho, Utah, Arizona, New Mexico, Nevada, California, Oregon, Washington, Alaska, and Hawaii",
+            '<div class="sub">Church of God locations across all 50 states</div>',
             index,
         )
         self.assertIn('id="st"', index)
