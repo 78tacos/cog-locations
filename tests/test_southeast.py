@@ -246,7 +246,7 @@ class SoutheastPageTests(unittest.TestCase):
         self.assertIn(">Clear</button>", index)
         self.assertIn("#clear{background:#0b57d0", index)
         self.assertIn("zoomToShowLayer", index)
-        self.assertNotIn("if(center)search()", index)
+        self.assertNotIn("if(center)search();else showAll()", index)
         self.assertNotIn("zoomToBoundsOnClick:false", index)
         self.assertNotIn("function showChurch", index)
         self.assertNotIn("{autoPan:false}", index)
@@ -281,9 +281,18 @@ class SoutheastPageTests(unittest.TestCase):
         self.assertLess(geocode.index("invalidateGeocode()"), geocode.index("const seq=geoSeq"))
         self.assertIn("signal:ctrl.signal", geocode)
         self.assertLess(geocode.index("if(seq!==geoSeq)return"), geocode.index("center=["))
-        self.assertIn("if(seq!==geoSeq||e.name==='AbortError')return", geocode)
+        self.assertIn("if(e.name==='AbortError'){clearGeocodingStatus();return}", geocode)
         self.assertIn("invalidateGeocode()", show_all)
         self.assertLess(show_all.index("invalidateGeocode()"), show_all.index("circle=cm=center=null"))
+        self.assertIn("allStatus(s.length,visible.length)", show_all)
+
+    def test_empty_search_clears_a_stuck_geocoding_status(self):
+        index = (ROOT / "index.html").read_text(encoding="utf-8")
+        geocode = index[index.index("async function geocode"):index.index("function cancelZoomAnim")]
+        self.assertIn("function clearGeocodingStatus()", index)
+        self.assertIn("if(el.textContent!=='Geocoding…')return", index)
+        self.assertIn("if(!q){invalidateGeocode();if(center)search();else clearGeocodingStatus();return}", geocode)
+        self.assertLess(geocode.index("else clearGeocodingStatus()"), geocode.index("textContent='Geocoding…'"))
 
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")

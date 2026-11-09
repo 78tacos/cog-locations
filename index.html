@@ -55,23 +55,24 @@ function search(fit){if(!center)return;const r=miles();const pool=PINNED.filter(
  const where=selectedState()?` ${stateLabel()}`:'';
  document.getElementById('status').textContent=`${res.length}${where} churches within ${r} mi`;}
 function invalidateGeocode(){geoSeq++;if(geoAbort){geoAbort.abort();geoAbort=null}}
-async function geocode(){let q=document.getElementById('addr').value.trim();invalidateGeocode();if(!q){search();return}
- const seq=geoSeq,ctrl=new AbortController();geoAbort=ctrl;
+function allStatus(mapped,total){const where=selectedState()?` in ${stateLabel()}`:'';return `Showing all ${mapped} mapped churches${where}`+(total>mapped?` (${total-mapped} without a pin are in the directory)`:'')}
+function clearGeocodingStatus(){const el=document.getElementById('status');if(el.textContent!=='Geocoding…')return;const visible=CHURCHES.filter(inState).length,mapped=PINNED.filter(inState).length;el.textContent=allStatus(mapped,visible)}
+async function geocode(){let q=document.getElementById('addr').value.trim();if(!q){invalidateGeocode();if(center)search();else clearGeocodingStatus();return}
+ invalidateGeocode();const seq=geoSeq,ctrl=new AbortController();geoAbort=ctrl;
  const code=selectedState();
  if(code){const name=stateLabel();if(!new RegExp('\\b(?:'+code+'|'+name+')\\b','i').test(q))q+=', '+name}
  document.getElementById('status').textContent='Geocoding…';
  const b=boundsFor(),viewbox=[b[0][1],b[1][0],b[1][1],b[0][0]].join(',');
  const u='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox='+viewbox+'&q='+encodeURIComponent(q);
  try{const j=await (await fetch(u,{signal:ctrl.signal,headers:{'Accept':'application/json'}})).json();if(seq!==geoSeq)return;if(!j.length){document.getElementById('status').textContent='Address not found.';return}
- center=[+j[0].lat,+j[0].lon];search()}catch(e){if(seq!==geoSeq||e.name==='AbortError')return;document.getElementById('status').textContent='Geocoding failed: '+e}}
+ center=[+j[0].lat,+j[0].lon];search()}catch(e){if(seq!==geoSeq)return;if(e.name==='AbortError'){clearGeocodingStatus();return}document.getElementById('status').textContent='Geocoding failed: '+e}}
 function cancelZoomAnim(){if(map._animatingZoom)map._onZoomTransitionEnd();map._mapPane&&map._mapPane.classList.remove('leaflet-zoom-anim')}
 function fitView(){const gen=++fitGen,state=selectedState(),opts=state?{animate:false,padding:[12,12]}:{animate:false},bounds=state?boundsFor():LOWER48;
  cancelZoomAnim();map.invalidateSize();fitting++;map.fitBounds(bounds,opts);fitting--;
  requestAnimationFrame(()=>{if(gen!==fitGen)return;cancelZoomAnim();fitting++;map.fitBounds(bounds,opts);fitting--})}
 function showAll(){invalidateGeocode();map.closePopup();if(circle)map.removeLayer(circle);if(cm)map.removeLayer(cm);circle=cm=center=null;CHURCHES.forEach(c=>c.d=null);
  const visible=CHURCHES.filter(inState),s=PINNED.filter(inState).sort((a,b)=>a.name.localeCompare(b.name));render(s,false);fitView();syncClear();
- const where=selectedState()?` in ${stateLabel()}`:'';
- document.getElementById('status').textContent=`Showing all ${s.length} mapped churches${where}`+(visible.length>s.length?` (${visible.length-s.length} without a pin are in the directory)`:'');}
+ document.getElementById('status').textContent=allStatus(s.length,visible.length);}
 document.getElementById('go').onclick=geocode;document.getElementById('addr').onkeydown=e=>{if(e.key==='Enter')geocode()};
 document.getElementById('rad').onchange=e=>{document.getElementById('radc').style.display=e.target.value==='custom'?'inline':'none';search()};
 document.getElementById('radc').oninput=search;
