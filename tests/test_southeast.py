@@ -263,10 +263,27 @@ class SoutheastPageTests(unittest.TestCase):
         )
         self.assertIn("const LOWER48=[[24.5,-125],[49.5,-66.5]]", index)
         self.assertIn(".fitBounds(LOWER48)", index)
-        self.assertIn("map._animatingZoom=false", index)
-        self.assertIn("requestAnimationFrame(()=>{cancelZoomAnim();map.fitBounds(bounds,opts)})", index)
+        self.assertNotIn("map._animatingZoom=false", index)
+        self.assertIn("if(map._animatingZoom)map._onZoomTransitionEnd()", index)
+        self.assertIn("map.invalidateSize();fitting++;map.fitBounds(bounds,opts)", index)
+        self.assertNotIn("if(state)map.invalidateSize()", index)
+        self.assertIn("if(gen!==fitGen)return", index)
+        self.assertIn("map.on('dragstart zoomstart',()=>{if(!fitting)fitGen++})", index)
+        self.assertIn("addEventListener('keydown',()=>{if(!fitting)fitGen++})", index)
         self.assertIn("{animate:false,padding:[12,12]}", index)
         self.assertIn("return code?(BOUNDS[code]||BOUNDS.ALL):LOWER48", index)
+
+    def test_stale_geocode_is_ignored_after_reset(self):
+        index = (ROOT / "index.html").read_text(encoding="utf-8")
+        geocode = index[index.index("async function geocode"):index.index("function cancelZoomAnim")]
+        show_all = index[index.index("function showAll"):index.index("document.getElementById('go')")]
+        self.assertIn("function invalidateGeocode(){geoSeq++;if(geoAbort){geoAbort.abort();geoAbort=null}}", index)
+        self.assertLess(geocode.index("invalidateGeocode()"), geocode.index("const seq=geoSeq"))
+        self.assertIn("signal:ctrl.signal", geocode)
+        self.assertLess(geocode.index("if(seq!==geoSeq)return"), geocode.index("center=["))
+        self.assertIn("if(seq!==geoSeq||e.name==='AbortError')return", geocode)
+        self.assertIn("invalidateGeocode()", show_all)
+        self.assertLess(show_all.index("invalidateGeocode()"), show_all.index("circle=cm=center=null"))
 
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")

@@ -28,7 +28,7 @@ const BOUNDS={FL:[[24.4,-87.7],[31.1,-79.8]],GA:[[30.25,-85.75],[35.15,-80.7]],A
 const LOWER48=[[24.5,-125],[49.5,-66.5]];
 const map=L.map('map',{preferCanvas:true}).fitBounds(LOWER48);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-const cl=L.markerClusterGroup({chunkedLoading:true,removeOutsideVisibleBounds:true,maxClusterRadius:60}).addTo(map);let center=null,circle=null,cm=null;
+const cl=L.markerClusterGroup({chunkedLoading:true,removeOutsideVisibleBounds:true,maxClusterRadius:60}).addTo(map);let center=null,circle=null,cm=null,geoSeq=0,geoAbort=null,fitGen=0,fitting=0;
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const stSel=document.getElementById('st');
 stSel.innerHTML='<option value="">All states</option>'+[...new Set(CHURCHES.map(c=>c.state))].filter(Boolean).sort().map(code=>`<option value="${esc(code)}">${esc(STATE_NAME[code]||code)}</option>`).join('');
@@ -54,19 +54,21 @@ function search(fit){if(!center)return;const r=miles();const pool=PINNED.filter(
  if(fit!==false)map.fitBounds(circle.getBounds());render(res,true);syncClear();
  const where=selectedState()?` ${stateLabel()}`:'';
  document.getElementById('status').textContent=`${res.length}${where} churches within ${r} mi`;}
-async function geocode(){let q=document.getElementById('addr').value.trim();if(!q){search();return}
+function invalidateGeocode(){geoSeq++;if(geoAbort){geoAbort.abort();geoAbort=null}}
+async function geocode(){let q=document.getElementById('addr').value.trim();invalidateGeocode();if(!q){search();return}
+ const seq=geoSeq,ctrl=new AbortController();geoAbort=ctrl;
  const code=selectedState();
  if(code){const name=stateLabel();if(!new RegExp('\\b(?:'+code+'|'+name+')\\b','i').test(q))q+=', '+name}
  document.getElementById('status').textContent='Geocoding…';
  const b=boundsFor(),viewbox=[b[0][1],b[1][0],b[1][1],b[0][0]].join(',');
  const u='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox='+viewbox+'&q='+encodeURIComponent(q);
- try{const j=await (await fetch(u,{headers:{'Accept':'application/json'}})).json();if(!j.length){document.getElementById('status').textContent='Address not found.';return}
- center=[+j[0].lat,+j[0].lon];search()}catch(e){document.getElementById('status').textContent='Geocoding failed: '+e}}
-function cancelZoomAnim(){map._animatingZoom=false;map._mapPane&&map._mapPane.classList.remove('leaflet-zoom-anim')}
-function fitView(){const state=selectedState(),opts=state?{animate:false,padding:[12,12]}:{animate:false},bounds=state?boundsFor():LOWER48;
- cancelZoomAnim();if(state)map.invalidateSize();map.fitBounds(bounds,opts);
- requestAnimationFrame(()=>{cancelZoomAnim();map.fitBounds(bounds,opts)})}
-function showAll(){map.closePopup();if(circle)map.removeLayer(circle);if(cm)map.removeLayer(cm);circle=cm=center=null;CHURCHES.forEach(c=>c.d=null);
+ try{const j=await (await fetch(u,{signal:ctrl.signal,headers:{'Accept':'application/json'}})).json();if(seq!==geoSeq)return;if(!j.length){document.getElementById('status').textContent='Address not found.';return}
+ center=[+j[0].lat,+j[0].lon];search()}catch(e){if(seq!==geoSeq||e.name==='AbortError')return;document.getElementById('status').textContent='Geocoding failed: '+e}}
+function cancelZoomAnim(){if(map._animatingZoom)map._onZoomTransitionEnd();map._mapPane&&map._mapPane.classList.remove('leaflet-zoom-anim')}
+function fitView(){const gen=++fitGen,state=selectedState(),opts=state?{animate:false,padding:[12,12]}:{animate:false},bounds=state?boundsFor():LOWER48;
+ cancelZoomAnim();map.invalidateSize();fitting++;map.fitBounds(bounds,opts);fitting--;
+ requestAnimationFrame(()=>{if(gen!==fitGen)return;cancelZoomAnim();fitting++;map.fitBounds(bounds,opts);fitting--})}
+function showAll(){invalidateGeocode();map.closePopup();if(circle)map.removeLayer(circle);if(cm)map.removeLayer(cm);circle=cm=center=null;CHURCHES.forEach(c=>c.d=null);
  const visible=CHURCHES.filter(inState),s=PINNED.filter(inState).sort((a,b)=>a.name.localeCompare(b.name));render(s,false);fitView();syncClear();
  const where=selectedState()?` in ${stateLabel()}`:'';
  document.getElementById('status').textContent=`Showing all ${s.length} mapped churches${where}`+(visible.length>s.length?` (${visible.length-s.length} without a pin are in the directory)`:'');}
@@ -75,6 +77,8 @@ document.getElementById('rad').onchange=e=>{document.getElementById('radc').styl
 document.getElementById('radc').oninput=search;
 stSel.onchange=()=>{document.getElementById('addr').value='';showAll()};
 map.on('click',e=>{const t=e.originalEvent&&e.originalEvent.target;if(t&&t.closest&&t.closest('.leaflet-marker-icon,.leaflet-popup,.leaflet-control'))return;center=[e.latlng.lat,e.latlng.lng];search(false)});
+map.on('dragstart zoomstart',()=>{if(!fitting)fitGen++});
+map.getContainer().addEventListener('keydown',()=>{if(!fitting)fitGen++});
 document.getElementById('all').onclick=showAll;
 document.getElementById('clear').onclick=()=>{document.getElementById('addr').value='';showAll()};
 showAll();
