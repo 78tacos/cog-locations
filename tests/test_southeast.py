@@ -240,6 +240,60 @@ class SoutheastPageTests(unittest.TestCase):
             self.assertIn(f"{code}:'{label}'", index)
             self.assertIn(f"{code}:[[", index)
 
+    def test_map_clicks_stay_put_and_state_filter_clears_the_radius(self):
+        index = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="clear"', index)
+        self.assertIn(">Clear</button>", index)
+        self.assertIn("#clear{background:#0b57d0", index)
+        self.assertIn("zoomToShowLayer", index)
+        self.assertNotIn("if(center)search();else showAll()", index)
+        self.assertNotIn("zoomToBoundsOnClick:false", index)
+        self.assertNotIn("function showChurch", index)
+        self.assertNotIn("{autoPan:false}", index)
+        self.assertIn("if(fit!==false)map.fitBounds(circle.getBounds())", index)
+        self.assertIn("search(false)", index)
+        self.assertIn(".leaflet-marker-icon,.leaflet-popup,.leaflet-control", index)
+        self.assertIn(
+            "stSel.onchange=()=>{document.getElementById('addr').value='';showAll()}",
+            index,
+        )
+        self.assertIn(
+            "document.getElementById('clear').onclick=()=>{document.getElementById('addr').value='';showAll()}",
+            index,
+        )
+        self.assertIn("const LOWER48=[[24.5,-125],[49.5,-66.5]]", index)
+        self.assertIn(".fitBounds(LOWER48)", index)
+        self.assertNotIn("map._animatingZoom=false", index)
+        self.assertIn("if(map._animatingZoom)map._onZoomTransitionEnd()", index)
+        self.assertIn("map.invalidateSize();fitting++;map.fitBounds(bounds,opts)", index)
+        self.assertNotIn("if(state)map.invalidateSize()", index)
+        self.assertIn("if(gen!==fitGen)return", index)
+        self.assertIn("map.on('dragstart zoomstart',()=>{if(!fitting)fitGen++})", index)
+        self.assertIn("addEventListener('keydown',()=>{if(!fitting)fitGen++})", index)
+        self.assertIn("{animate:false,padding:[12,12]}", index)
+        self.assertIn("return code?(BOUNDS[code]||BOUNDS.ALL):LOWER48", index)
+
+    def test_stale_geocode_is_ignored_after_reset(self):
+        index = (ROOT / "index.html").read_text(encoding="utf-8")
+        geocode = index[index.index("async function geocode"):index.index("function cancelZoomAnim")]
+        show_all = index[index.index("function showAll"):index.index("document.getElementById('go')")]
+        self.assertIn("function invalidateGeocode(){geoSeq++;if(geoAbort){geoAbort.abort();geoAbort=null}}", index)
+        self.assertLess(geocode.index("invalidateGeocode()"), geocode.index("const seq=geoSeq"))
+        self.assertIn("signal:ctrl.signal", geocode)
+        self.assertLess(geocode.index("if(seq!==geoSeq)return"), geocode.index("center=["))
+        self.assertIn("if(e.name==='AbortError'){clearGeocodingStatus();return}", geocode)
+        self.assertIn("invalidateGeocode()", show_all)
+        self.assertLess(show_all.index("invalidateGeocode()"), show_all.index("circle=cm=center=null"))
+        self.assertIn("allStatus(s.length,visible.length)", show_all)
+
+    def test_empty_search_clears_a_stuck_geocoding_status(self):
+        index = (ROOT / "index.html").read_text(encoding="utf-8")
+        geocode = index[index.index("async function geocode"):index.index("function cancelZoomAnim")]
+        self.assertIn("function clearGeocodingStatus()", index)
+        self.assertIn("if(el.textContent!=='Geocoding…')return", index)
+        self.assertIn("if(!q){invalidateGeocode();if(center)search();else clearGeocodingStatus();return}", geocode)
+        self.assertLess(geocode.index("else clearGeocodingStatus()"), geocode.index("textContent='Geocoding…'"))
+
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")
         self.assertIn(
