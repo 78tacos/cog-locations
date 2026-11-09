@@ -240,6 +240,34 @@ class SoutheastPageTests(unittest.TestCase):
             self.assertIn(f"{code}:'{label}'", index)
             self.assertIn(f"{code}:[[", index)
 
+    def test_map_clicks_stay_put_and_state_filter_clears_the_radius(self):
+        index = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="clear"', index)
+        self.assertIn(">Clear</button>", index)
+        self.assertIn("#clear{background:#0b57d0", index)
+        self.assertIn("zoomToShowLayer", index)
+        self.assertNotIn("if(center)search()", index)
+        self.assertNotIn("zoomToBoundsOnClick:false", index)
+        self.assertNotIn("function showChurch", index)
+        self.assertNotIn("{autoPan:false}", index)
+        self.assertIn("if(fit!==false)map.fitBounds(circle.getBounds())", index)
+        self.assertIn("search(false)", index)
+        self.assertIn(".leaflet-marker-icon,.leaflet-popup,.leaflet-control", index)
+        self.assertIn(
+            "stSel.onchange=()=>{document.getElementById('addr').value='';showAll()}",
+            index,
+        )
+        self.assertIn(
+            "document.getElementById('clear').onclick=()=>{document.getElementById('addr').value='';showAll()}",
+            index,
+        )
+        self.assertIn("const LOWER48=[[24.5,-125],[49.5,-66.5]]", index)
+        self.assertIn(".fitBounds(LOWER48)", index)
+        self.assertIn("map._animatingZoom=false", index)
+        self.assertIn("requestAnimationFrame(()=>{cancelZoomAnim();map.fitBounds(bounds,opts)})", index)
+        self.assertIn("{animate:false,padding:[12,12]}", index)
+        self.assertIn("return code?(BOUNDS[code]||BOUNDS.ALL):LOWER48", index)
+
     def test_directory_state_filter_keeps_counties_and_cities_apart(self):
         directory = (ROOT / "directory.html").read_text(encoding="utf-8")
         self.assertIn(
